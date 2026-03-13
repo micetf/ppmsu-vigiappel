@@ -1,5 +1,7 @@
-import { useState } from "react";
-import { generateAndDownload } from "../utils/docxGenerator";
+import { useEffect, useState } from "react";
+import { saveAs } from "file-saver";
+import JSZip from "jszip";
+import { generateAll, slug } from "../utils/docxGenerator";
 
 export default function GenerationPanel({
     config,
@@ -8,136 +10,190 @@ export default function GenerationPanel({
     totalStudents,
     onBack,
 }) {
-    const [status, setStatus] = useState("idle");
-    const [result, setResult] = useState(null);
+    const [files, setFiles] = useState(null);
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [zipping, setZipping] = useState(false);
 
-    const { configType, zones } = config;
-    const multiZone = zones.length > 1;
-    const docCount =
-        configType === "A"
-            ? 1
-            : classes.length + (multiZone ? zones.length : 0) + 1;
+    useEffect(() => {
+        let cancelled = false;
+        setLoading(true);
+        generateAll(config, csvData)
+            .then((result) => {
+                if (!cancelled) {
+                    setFiles(result);
+                    setLoading(false);
+                }
+            })
+            .catch((e) => {
+                if (!cancelled) {
+                    setError(e.message || "Erreur.");
+                    setLoading(false);
+                }
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
-    async function handleGenerate() {
-        setStatus("generating");
-        setError(null);
-        try {
-            const res = await generateAndDownload(config, csvData);
-            setResult(res);
-            setStatus("done");
-        } catch (err) {
-            setError(err.message);
-            setStatus("error");
-        }
-    }
+    const handleDownloadOne = (file) => saveAs(file.blob, file.name);
+
+    const handleDownloadAll = async () => {
+        setZipping(true);
+        const zip = new JSZip();
+        files.forEach((f) => zip.file(f.name, f.blob));
+        const blob = await zip.generateAsync({ type: "blob" });
+        saveAs(blob, `PPMS_${slug(config.schoolName)}.zip`);
+        setZipping(false);
+    };
 
     return (
         <div className="space-y-6">
-            <h2 className="text-lg font-semibold text-gray-800">
-                Étape 4 – Génération des fiches DOCX
-            </h2>
-
-            {/* Récap */}
-            <div className="bg-white border border-gray-200 rounded-xl p-5 text-sm text-gray-700 space-y-2.5">
-                <Row label="École" value={config.schoolName} />
-                <Row label="Responsable" value={config.responsible} />
-                <Row
-                    label="Format"
-                    value={
-                        configType === "A"
-                            ? "Option A – Fiche unique"
-                            : "Option B – Fiche par classe"
-                    }
-                />
-                <Row
-                    label="Élèves"
-                    value={`${totalStudents} élèves — ${classes.length} classes`}
-                />
-                {zones.map((z, i) => (
-                    <Row
-                        key={z.id}
-                        label={zones.length > 1 ? `Zone ${i + 1}` : "Zone"}
-                        value={`${z.name} — ${z.responsible}`}
-                    />
-                ))}
-                <div className="border-t border-gray-100 pt-2.5">
-                    <Row
-                        label="Fichiers"
-                        value={`${docCount} document${docCount > 1 ? "s DOCX (ZIP)" : " DOCX"}`}
-                    />
-                </div>
+            <div>
+                <h2 className="text-lg font-semibold text-gray-800 mb-1">
+                    Étape 4 – Téléchargement des fiches
+                </h2>
+                <p className="text-sm text-gray-500">
+                    {totalStudents} élève{totalStudents > 1 ? "s" : ""} —{" "}
+                    {classes.length} classe{classes.length > 1 ? "s" : ""} —{" "}
+                    {config.zones.length} zone
+                    {config.zones.length > 1 ? "s" : ""}
+                </p>
             </div>
 
-            {/* Actions */}
-            {status === "idle" && (
-                <button
-                    onClick={handleGenerate}
-                    className="px-8 py-3 bg-blue-800 text-white rounded-xl hover:bg-blue-900 font-semibold text-sm transition-colors shadow"
-                >
-                    📄 Générer et télécharger
-                </button>
-            )}
-
-            {status === "generating" && (
-                <div className="flex items-center gap-3 text-blue-700 text-sm animate-pulse">
-                    <span>⏳</span> Génération en cours…
-                </div>
-            )}
-
-            {status === "done" && (
-                <div className="space-y-3">
-                    <div className="bg-green-50 border border-green-300 rounded-xl p-4 text-sm text-green-800 flex gap-3">
-                        <span className="text-xl shrink-0">✅</span>
-                        <div>
-                            <p className="font-semibold">
-                                {result.count} fichier
-                                {result.count > 1 ? "s générés" : " généré"}{" "}
-                                avec succès
-                            </p>
-                            <p className="text-green-700 mt-0.5">
-                                {result.count > 1
-                                    ? "Le fichier ZIP a été téléchargé — décompressez-le pour accéder aux fiches."
-                                    : "Le fichier DOCX a été téléchargé."}
-                            </p>
-                        </div>
-                    </div>
-                    <button
-                        onClick={handleGenerate}
-                        className="text-sm text-blue-700 hover:underline"
+            {/* État : chargement */}
+            {loading && (
+                <div className="flex items-center gap-3 text-sm text-gray-500 py-8 justify-center">
+                    <svg
+                        className="animate-spin w-5 h-5 text-blue-600"
+                        fill="none"
+                        viewBox="0 0 24 24"
                     >
-                        ↺ Télécharger à nouveau
-                    </button>
+                        <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                        />
+                        <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8v8z"
+                        />
+                    </svg>
+                    Génération des documents en cours…
                 </div>
             )}
 
-            {status === "error" && (
-                <div className="bg-red-50 border border-red-300 rounded-xl p-4 text-sm text-red-700 flex gap-3">
-                    <span>⚠️</span>
-                    <div>
-                        <p className="font-semibold">
-                            Erreur lors de la génération
-                        </p>
-                        <p className="mt-0.5 font-mono text-xs">{error}</p>
+            {/* État : erreur */}
+            {error && (
+                <div className="bg-red-50 border border-red-300 text-red-700 rounded-lg px-4 py-3 text-sm">
+                    ⚠️ {error}
+                </div>
+            )}
+
+            {/* État : fichiers prêts */}
+            {files && (
+                <div className="space-y-4">
+                    <p className="text-sm font-medium text-gray-700">
+                        {files.length} document{files.length > 1 ? "s" : ""}{" "}
+                        prêt{files.length > 1 ? "s" : ""}
+                    </p>
+
+                    {/* Cartes de téléchargement */}
+                    <div className="space-y-3">
+                        {files.map((file) => (
+                            <div
+                                key={file.name}
+                                className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-5 py-4 gap-4 hover:border-blue-300 transition-colors"
+                            >
+                                <div className="flex items-start gap-3 min-w-0">
+                                    <span className="text-2xl shrink-0">
+                                        {file.label.startsWith("Mallette")
+                                            ? "📁"
+                                            : "📋"}
+                                    </span>
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-semibold text-gray-800 truncate">
+                                            {file.label}
+                                        </p>
+                                        {file.description && (
+                                            <p className="text-xs text-gray-500">
+                                                {file.description}
+                                            </p>
+                                        )}
+                                        <p className="text-xs text-gray-400 font-mono mt-0.5 truncate">
+                                            {file.name}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => handleDownloadOne(file)}
+                                    className="shrink-0 flex items-center gap-2 px-4 py-2 bg-blue-800 text-white text-sm font-medium rounded-lg hover:bg-blue-900 transition-colors"
+                                >
+                                    <svg
+                                        className="w-4 h-4"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                                        />
+                                    </svg>
+                                    Télécharger
+                                </button>
+                            </div>
+                        ))}
                     </div>
+
+                    {/* Option secondaire : tout en ZIP */}
+                    {files.length > 1 && (
+                        <div className="pt-2 border-t border-gray-100 flex justify-end">
+                            <button
+                                type="button"
+                                onClick={handleDownloadAll}
+                                disabled={zipping}
+                                className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-300 hover:border-gray-400 rounded-lg px-4 py-2 transition-colors disabled:opacity-50"
+                            >
+                                <svg
+                                    className="w-4 h-4"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                                    />
+                                </svg>
+                                {zipping
+                                    ? "Compression…"
+                                    : "Tout télécharger en ZIP"}
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
 
-            <button
-                onClick={onBack}
-                className="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
-            >
-                ← Modifier la configuration
-            </button>
-        </div>
-    );
-}
-
-function Row({ label, value }) {
-    return (
-        <div className="flex gap-4">
-            <span className="w-40 text-gray-400 shrink-0">{label}</span>
-            <span className="font-medium">{value}</span>
+            {/* Navigation */}
+            <div className="flex gap-3 pt-2">
+                <button
+                    type="button"
+                    onClick={onBack}
+                    className="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+                >
+                    ← Modifier la configuration
+                </button>
+            </div>
         </div>
     );
 }

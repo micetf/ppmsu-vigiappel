@@ -1,7 +1,13 @@
 import { useState } from "react";
+import { toNom, toPrenom } from "../utils/formatName";
 
 let _zoneId = 1;
-const newZone = () => ({ id: `z${++_zoneId}`, name: "", responsible: "" });
+const newZone = () => ({
+    id: `z${++_zoneId}`,
+    name: "",
+    responsibleNom: "",
+    responsiblePrenom: "",
+});
 
 let _staffId = 0;
 const newStaff = () => ({
@@ -32,7 +38,7 @@ const FONCTIONS_STAFF = [
 const DEFAULTS = {
     schoolName: "",
     configType: "A",
-    zones: [{ id: "z1", name: "", responsible: "" }],
+    zones: [{ id: "z1", name: "", responsibleNom: "", responsiblePrenom: "" }],
     classZoneMap: {},
     crisisCell: { nom: "", prenom: "", fonction: "Directeur/trice" }, // ← champ dédié
     staff: [],
@@ -132,8 +138,8 @@ export default function ConfigForm({
             e.crisisCell_nom = "Champ obligatoire";
         config.zones.forEach((z) => {
             if (!z.name.trim()) e[`zone_${z.id}_name`] = "Champ obligatoire";
-            if (!z.responsible.trim())
-                e[`zone_${z.id}_responsible`] = "Champ obligatoire";
+            if (!z.responsibleNom.trim())
+                e[`zone_${z.id}_responsibleNom`] = "Champ obligatoire";
         });
         config.staff.forEach((s) => {
             if (!s.nom.trim()) e[`staff_${s.id}_nom`] = "Obligatoire";
@@ -272,13 +278,12 @@ export default function ConfigForm({
                                     </button>
                                 )}
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 <Field
                                     label="Lieu"
                                     error={errors[`zone_${zone.id}_name`]}
                                 >
                                     <input
-                                        type="text"
                                         placeholder="Gymnase, salle polyvalente…"
                                         value={zone.name}
                                         onChange={(e) =>
@@ -294,32 +299,44 @@ export default function ConfigForm({
                                     />
                                 </Field>
                                 <Field
-                                    label="Responsable de cette zone"
-                                    hint={
-                                        multiZone
-                                            ? "Adulte désigné pour coordonner les remontées vers la cellule de crise. Différent du directeur/de la directrice."
-                                            : "Adulte désigné pour centraliser les fiches et les remonter à la cellule de crise."
-                                    }
+                                    label="Responsable — Nom"
                                     error={
-                                        errors[`zone_${zone.id}_responsible`]
+                                        errors[`zone_${zone.id}_responsibleNom`]
                                     }
                                 >
                                     <input
-                                        type="text"
-                                        placeholder="M. Martin, enseignant"
-                                        value={zone.responsible}
+                                        placeholder="MARTIN"
+                                        value={zone.responsibleNom}
                                         onChange={(e) =>
                                             updateZone(
                                                 zone.id,
-                                                "responsible",
-                                                e.target.value
+                                                "responsibleNom",
+                                                toNom(e.target.value)
                                             )
                                         }
                                         className={cx(
                                             errors[
-                                                `zone_${zone.id}_responsible`
+                                                `zone_${zone.id}_responsibleNom`
                                             ]
                                         )}
+                                    />
+                                </Field>
+                                <Field
+                                    label="Responsable — Prénom"
+                                    hint="Pas de champ *"
+                                    error={undefined}
+                                >
+                                    <input
+                                        placeholder="Paul"
+                                        value={zone.responsiblePrenom}
+                                        onChange={(e) =>
+                                            updateZone(
+                                                zone.id,
+                                                "responsiblePrenom",
+                                                toPrenom(e.target.value)
+                                            )
+                                        }
+                                        className={cx()}
                                     />
                                 </Field>
                             </div>
@@ -399,7 +416,7 @@ export default function ConfigForm({
                                 placeholder="Nom *"
                                 value={config.crisisCell.nom}
                                 onChange={(e) =>
-                                    setCrisisCell("nom", e.target.value)
+                                    setCrisisCell("nom", toNom(e.target.value))
                                 }
                                 className={
                                     cx(errors.crisisCell_nom) + " text-sm"
@@ -420,7 +437,10 @@ export default function ConfigForm({
                                 placeholder="Prénom"
                                 value={config.crisisCell.prenom}
                                 onChange={(e) =>
-                                    setCrisisCell("prenom", e.target.value)
+                                    setCrisisCell(
+                                        "prenom",
+                                        toPrenom(e.target.value)
+                                    )
                                 }
                                 className={cx() + " text-sm"}
                             />
@@ -475,7 +495,7 @@ export default function ConfigForm({
                                                 updateStaff(
                                                     s.id,
                                                     "nom",
-                                                    e.target.value
+                                                    toNom(e.target.value)
                                                 )
                                             }
                                             className={
@@ -499,7 +519,7 @@ export default function ConfigForm({
                                                 updateStaff(
                                                     s.id,
                                                     "prenom",
-                                                    e.target.value
+                                                    toPrenom(e.target.value)
                                                 )
                                             }
                                             className={cx() + " text-xs"}
@@ -676,9 +696,6 @@ function GenerationPreview({ config, classes }) {
             </p>
             <p className="text-gray-500 text-xs">
                 Cellule de crise : {criseName}
-            </p>
-            <p className="text-blue-700 font-semibold pt-1">
-                = {fileCount} fichiers DOCX (ZIP) · 1 fichier = 1 mallette PPMS
             </p>
             <p className="text-gray-400 text-xs">La date est laissée vierge.</p>
         </div>

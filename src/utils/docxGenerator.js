@@ -13,8 +13,7 @@ import {
     ShadingType,
     SectionType,
 } from "docx";
-import { saveAs } from "file-saver";
-import JSZip from "jszip";
+import { fullName } from "./formatName";
 
 // ── Constantes ─────────────────────────────────────────────────────
 const FONT = "Arial";
@@ -39,6 +38,30 @@ const SHADE_ADULT = {
 };
 const PAGE_MARGIN = { top: 1134, bottom: 1134, left: 1134, right: 1134 };
 const TABLE_W = 9400;
+
+// ── Helpers ────────────────────────────────────────────────────────
+export const slug = (str) =>
+    String(str ?? "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9]/g, "_")
+        .replace(/_+/g, "_")
+        .slice(0, 40);
+
+const zoneResponsible = (zone) =>
+    fullName(zone.responsibleNom, zone.responsiblePrenom) || "Non défini";
+
+const getCrisisCell = (config) => {
+    const { nom, prenom, fonction } = config.crisisCell ?? {};
+    if (!nom?.trim()) return "Non défini";
+    return fullName(nom, prenom) + (fonction ? ` (${fonction})` : "");
+};
+
+const getClassStaff = (config, classe) =>
+    config.staff.filter((s) => s.rattachement === `class_${classe}`);
+
+const getZoneStaff = (config, zoneId) =>
+    config.staff.filter((s) => s.rattachement === zoneId);
 
 // ── Helpers typographie ────────────────────────────────────────────
 const run = (text, opts = {}) =>
@@ -94,8 +117,6 @@ const tableRow = (cells, { isHeader = false, height = 450 } = {}) =>
 const makeTable = (rows) =>
     new Table({ width: { size: TABLE_W, type: WidthType.DXA }, rows });
 
-// ── Section builder ────────────────────────────────────────────────
-// La dernière section d'un Document ne doit pas avoir type: NEXT_PAGE
 const makeSection = (children, isLast = false) => ({
     properties: isLast
         ? { page: { margin: PAGE_MARGIN } }
@@ -103,7 +124,7 @@ const makeSection = (children, isLast = false) => ({
     children,
 });
 
-// ── En-tête et pied communs ────────────────────────────────────────
+// ── En-tête et pied ────────────────────────────────────────────────
 function makeDocHeader(schoolName, title, lines = []) {
     return [
         para(
@@ -172,29 +193,8 @@ const makeDateLine = () =>
         { spacing: { before: 200, after: 0 } }
     );
 
-// ── Helpers config ─────────────────────────────────────────────────
-const getCrisisCell = (config) => {
-    const { nom, prenom, fonction } = config.crisisCell ?? {};
-    if (!nom?.trim()) return "Non défini";
-    return `${prenom} ${nom}`.trim() + (fonction ? ` (${fonction})` : "");
-};
+// ── Constructeurs de contenu ───────────────────────────────────────
 
-const getClassStaff = (config, classe) =>
-    config.staff.filter((s) => s.rattachement === `class_${classe}`);
-const getZoneStaff = (config, zoneId) =>
-    config.staff.filter((s) => s.rattachement === zoneId);
-
-const slug = (str) =>
-    String(str ?? "")
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-zA-Z0-9]/g, "_")
-        .replace(/_+/g, "_")
-        .slice(0, 40);
-
-// ── Constructeurs de contenu (retournent children[]) ───────────────
-
-/** Fiche adultes d'une zone */
 function makeAdultsChildren(zone, zoneStaff, blankRows, schoolName) {
     const W = [2200, 1800, 2200, 1200, 500, 500, 500, 500];
     const COLS = [
@@ -237,7 +237,7 @@ function makeAdultsChildren(zone, zoneStaff, blankRows, schoolName) {
 
     return [
         ...makeDocHeader(schoolName, `ADULTES — ${zone.name.toUpperCase()}`, [
-            `Responsable de zone : ${zone.responsible}`,
+            `Responsable de zone : ${zoneResponsible(zone)}`,
             "Compléter les lignes vierges avec les intervenants présents le jour J",
         ]),
         makeTable([
@@ -265,7 +265,7 @@ function makeAdultsChildren(zone, zoneStaff, blankRows, schoolName) {
                 run(`Total adultes permanents : ${zoneStaff.length}`, {
                     bold: true,
                 }),
-                run(`     Intervenants variables présents : _____`),
+                run("     Intervenants variables présents : _____"),
             ],
             { spacing: { before: 200 } }
         ),
@@ -273,7 +273,6 @@ function makeAdultsChildren(zone, zoneStaff, blankRows, schoolName) {
     ];
 }
 
-/** Fiche classe individuelle (Option B) */
 function makeClassChildren(
     classe,
     students,
@@ -333,7 +332,7 @@ function makeClassChildren(
     return [
         ...makeDocHeader(schoolName, "FICHE DE RECENSEMENT", [
             `Classe : ${classe}`,
-            `Zone : ${zone.name}   |   Responsable de zone : ${zone.responsible}`,
+            `Zone : ${zone.name}   |   Responsable de zone : ${zoneResponsible(zone)}`,
         ]),
         sectionTitle(`Adultes (${allAdults.length})`),
         makeTable([
@@ -359,7 +358,6 @@ function makeClassChildren(
     ];
 }
 
-/** Fiche unique Option A (tous élèves + tous adultes) */
 function makeOptionAChildren(config, byClass, classes, teacherByClass) {
     const zone = config.zones[0];
     const crisisCell = getCrisisCell(config);
@@ -442,7 +440,7 @@ function makeOptionAChildren(config, byClass, classes, teacherByClass) {
 
     return [
         ...makeDocHeader(config.schoolName, "FICHE DE RECENSEMENT", [
-            `Zone : ${zone.name}   |   Responsable : ${zone.responsible}`,
+            `Zone : ${zone.name}   |   Responsable : ${zoneResponsible(zone)}`,
             `Cellule de crise : ${crisisCell}`,
         ]),
         sectionTitle(
@@ -482,7 +480,6 @@ function makeOptionAChildren(config, byClass, classes, teacherByClass) {
     ];
 }
 
-/** Synthèse par zone */
 function makeZoneSummaryChildren(
     zone,
     classesInZone,
@@ -510,7 +507,7 @@ function makeZoneSummaryChildren(
         ...makeDocHeader(
             schoolName,
             `SYNTHÈSE — ZONE ${zone.name.toUpperCase()}`,
-            [`Responsable de zone : ${zone.responsible}`]
+            [`Responsable de zone : ${zoneResponsible(zone)}`]
         ),
         makeTable([
             tableRow(
@@ -547,7 +544,6 @@ function makeZoneSummaryChildren(
     ];
 }
 
-/** Synthèse globale cellule de crise */
 function makeGlobalSummaryChildren(config, byClass, teacherByClass, classes) {
     const { zones, classZoneMap } = config;
     const multiZone = zones.length > 1;
@@ -617,7 +613,7 @@ function makeGlobalSummaryChildren(config, byClass, teacherByClass, classes) {
         ];
     };
 
-    const totalRow = (label, value) => {
+    const makeTotalRow = (label, value) => {
         const base = multiZone
             ? [
                   cell(label, { w: W[0] }),
@@ -648,9 +644,9 @@ function makeGlobalSummaryChildren(config, byClass, teacherByClass, classes) {
                 { isHeader: true }
             ),
             ...classes.map((cl, i) => tableRow(makeRowCells(cl, i))),
-            totalRow("TOTAL ÉLÈVES", totalStudents),
-            totalRow("TOTAL ADULTES*", totalAdultsTheo),
-            totalRow("TOTAL GÉNÉRAL", totalStudents + totalAdultsTheo),
+            makeTotalRow("TOTAL ÉLÈVES", totalStudents),
+            makeTotalRow("TOTAL ADULTES*", totalAdultsTheo),
+            makeTotalRow("TOTAL GÉNÉRAL", totalStudents + totalAdultsTheo),
         ]),
         para(
             [
@@ -666,8 +662,6 @@ function makeGlobalSummaryChildren(config, byClass, teacherByClass, classes) {
 }
 
 // ── Builders de documents ──────────────────────────────────────────
-
-/** 1 document par zone : fiche adultes + fiches classes */
 function buildZoneDocument(
     zone,
     config,
@@ -700,7 +694,6 @@ function buildZoneDocument(
     });
 }
 
-/** Document cellule de crise : synthèse globale + synthèses zones (si multi-zones) */
 function buildCrisisDocument(config, byClass, teacherByClass, classes) {
     const { zones, classZoneMap } = config;
     const multiZone = zones.length > 1;
@@ -730,36 +723,37 @@ function buildCrisisDocument(config, byClass, teacherByClass, classes) {
     });
 }
 
-// ── Point d'entrée ─────────────────────────────────────────────────
-export async function generateAndDownload(config, csvData) {
+// ── Point d'entrée — retourne [{name, blob}] ───────────────────────
+export async function generateAll(config, csvData) {
     const { byClass, classes, teacherByClass } = csvData;
     const { configType, zones, classZoneMap } = config;
-    const zip = new JSZip();
+    const files = [];
 
     if (configType === "A") {
-        // Option A : 1 zone, fiche unique recensement + fichier cellule de crise
-        const zoneChildren = makeOptionAChildren(
+        const children = makeOptionAChildren(
             config,
             byClass,
             classes,
             teacherByClass
         );
-        zip.file(
-            `PPMS_Zone_${slug(zones[0].name || "Zone")}.docx`,
-            await Packer.toBlob(
-                new Document({ sections: [makeSection(zoneChildren, true)] })
-            )
-        );
+        files.push({
+            name: `PPMS_Zone_${slug(zones[0].name || "Zone")}.docx`,
+            label: `Mallette — ${zones[0].name || "Zone"}`,
+            blob: await Packer.toBlob(
+                new Document({ sections: [makeSection(children, true)] })
+            ),
+        });
     } else {
-        // Option B : 1 document par zone
         for (const zone of zones) {
             const classesInZone =
                 zones.length > 1
                     ? classes.filter((cl) => classZoneMap[cl] === zone.id)
                     : classes;
-            zip.file(
-                `PPMS_Zone_${slug(zone.name || "Zone")}.docx`,
-                await Packer.toBlob(
+            files.push({
+                name: `PPMS_Zone_${slug(zone.name || "Zone")}.docx`,
+                label: `Mallette — ${zone.name || "Zone"}`,
+                description: `Adultes + ${classesInZone.length} classe(s)`,
+                blob: await Packer.toBlob(
                     buildZoneDocument(
                         zone,
                         config,
@@ -767,23 +761,21 @@ export async function generateAndDownload(config, csvData) {
                         teacherByClass,
                         classesInZone
                     )
-                )
-            );
+                ),
+            });
         }
     }
 
-    // Cellule de crise : toujours présent
-    zip.file(
-        "PPMS_Cellule_Crise.docx",
-        await Packer.toBlob(
+    files.push({
+        name: "PPMS_Cellule_Crise.docx",
+        label: "Cellule de crise",
+        description:
+            "Synthèse globale" +
+            (zones.length > 1 ? " + synthèses par zone" : ""),
+        blob: await Packer.toBlob(
             buildCrisisDocument(config, byClass, teacherByClass, classes)
-        )
-    );
+        ),
+    });
 
-    const count = (configType === "A" ? 1 : zones.length) + 1;
-    saveAs(
-        await zip.generateAsync({ type: "blob" }),
-        `PPMS_${slug(config.schoolName)}.zip`
-    );
-    return { count };
+    return files;
 }
