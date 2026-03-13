@@ -1,3 +1,5 @@
+// src/App.jsx — version finale complète
+
 import { useState } from "react";
 import StepIndicator from "./components/StepIndicator";
 import FileUpload from "./components/FileUpload";
@@ -28,21 +30,38 @@ export default function App() {
         setStep(4);
     };
 
+    // Navigation retour vers étape déjà validée
+    function handleGoTo(n) {
+        if (n === 1) handleReset();
+        else setStep(n);
+    }
+
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
             <header className="bg-blue-800 text-white py-4 px-6 shadow-md">
-                <div className="max-w-4xl mx-auto flex items-baseline gap-3">
-                    <h1 className="text-xl font-bold tracking-tight">
-                        VigiAppel
-                    </h1>
-                    <span className="text-blue-300 text-sm">
-                        Générateur de fiches PPMS
-                    </span>
+                <div className="max-w-4xl mx-auto flex items-center justify-between">
+                    <div className="flex items-baseline gap-3">
+                        <h1 className="text-xl font-bold tracking-tight">
+                            VigiAppel
+                        </h1>
+                        <span className="text-blue-300 text-sm">
+                            Générateur de fiches PPMS
+                        </span>
+                    </div>
+                    {step > 1 && (
+                        <button
+                            onClick={handleReset}
+                            className="text-xs text-blue-300 hover:text-white border border-blue-600 hover:border-blue-400 rounded-lg px-3 py-1.5 transition-colors"
+                        >
+                            ↺ Recommencer
+                        </button>
+                    )}
                 </div>
             </header>
 
             <main className="flex-1 max-w-4xl mx-auto w-full p-6">
-                <StepIndicator current={step} />
+                <StepIndicator current={step} onGoTo={handleGoTo} />
+
                 {step === 1 && <FileUpload onParsed={handleParsed} />}
                 {step === 2 && csvResult && (
                     <DataPreview
@@ -70,8 +89,8 @@ export default function App() {
             </main>
 
             <footer className="text-center text-xs text-gray-400 py-3 border-t border-gray-200">
-                VigiAppel — Traitement 100 % local | Conforme RGPD | Modèle
-                Eduscol PPMS 2024
+                VigiAppel — Traitement 100&nbsp;% local · Aucune donnée
+                transmise · Conforme RGPD · Modèle Eduscol PPMS 2024
             </footer>
         </div>
     );

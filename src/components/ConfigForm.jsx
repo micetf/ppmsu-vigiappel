@@ -19,14 +19,6 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
     });
     const [errors, setErrors] = useState({});
 
-    // Dans ConfigForm, section zones — label "Responsable de cette zone"
-    // Remplacer le hint statique par un hint contextuel selon configType :
-
-    const zoneResponsableHint =
-        config.configType === "B"
-            ? "Adulte désigné pour centraliser les remontées depuis cette zone vers la cellule de crise. Peut être le/la directeur/trice si aucun autre adulte n'est désigné."
-            : "Adulte responsable de la zone. Son nom figurera en en-tête de la fiche.";
-
     // ── Setters ────────────────────────────────────────────────────
     const setField = (field, value) => {
         setConfig((p) => ({ ...p, [field]: value }));
@@ -91,6 +83,20 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
     const multiZone = config.zones.length > 1;
     const showClassMap = config.configType === "B" && multiZone;
 
+    // ── Hints contextuels ──────────────────────────────────────────
+    const responsableHint =
+        config.configType === "B"
+            ? "Pilote la cellule de crise : communications externes (112, IEN, mairie), centralise les bilans. Ne prend pas lui-même l'appel de sa classe."
+            : "Adulte responsable de la zone et du recensement. Son nom figurera en en-tête de la fiche.";
+
+    // Varie selon 1 zone ou multi-zones en Option B
+    const zoneResponsableHint =
+        config.configType === "B"
+            ? multiZone
+                ? "Adulte désigné pour coordonner les remontées de cette zone vers la cellule de crise. Doit être différent du directeur/de la directrice."
+                : "Adulte désigné pour centraliser les fiches de recensement et les remonter au directeur/à la directrice. Peut être le/la directeur/trice lui/elle-même si aucun autre adulte n'est disponible."
+            : "Adulte responsable de la zone. Son nom figurera en en-tête de la fiche.";
+
     return (
         <form onSubmit={handleSubmit} noValidate className="space-y-8">
             <div>
@@ -105,11 +111,8 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
 
             {/* École */}
             <Section title="École">
-                <Field
-                    label="Nom de l'école"
-                    hint={zoneResponsableHint}
-                    error={errors.schoolName}
-                >
+                {/* ✅ Pas de hint sur le nom de l'école */}
+                <Field label="Nom de l'école" error={errors.schoolName}>
                     <input
                         type="text"
                         placeholder="École élémentaire Jules Ferry"
@@ -118,17 +121,14 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
                         className={cx(errors.schoolName)}
                     />
                 </Field>
+                {/* ✅ Hint contextuel selon Option A/B */}
                 <Field
                     label={
                         config.configType === "B"
-                            ? "Responsable de la cellule de crise"
-                            : "Responsable de zone"
+                            ? "Directeur/trice (cellule de crise)"
+                            : "Responsable"
                     }
-                    hint={
-                        config.configType === "B"
-                            ? "Directeur/trice ou adulte désigné dans le PPMS. Apparaît sur la fiche de synthèse globale."
-                            : "Adulte responsable de la zone. Apparaît en en-tête de la fiche."
-                    }
+                    hint={responsableHint}
                     error={errors.responsible}
                 >
                     <input
@@ -171,11 +171,19 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
                             type="button"
                             onClick={() => setField("configType", opt.id)}
                             className={`text-left rounded-xl border-2 p-4 transition-all outline-none focus-visible:ring-2 focus-visible:ring-blue-500
-                ${config.configType === opt.id ? "border-blue-700 bg-blue-50" : "border-gray-200 bg-white hover:border-blue-300"}`}
+                                ${
+                                    config.configType === opt.id
+                                        ? "border-blue-700 bg-blue-50"
+                                        : "border-gray-200 bg-white hover:border-blue-300"
+                                }`}
                         >
                             <div className="flex items-center gap-2 mb-1.5">
                                 <span
-                                    className={`w-4 h-4 rounded-full border-2 shrink-0 ${config.configType === opt.id ? "border-blue-700 bg-blue-700" : "border-gray-300"}`}
+                                    className={`w-4 h-4 rounded-full border-2 shrink-0 ${
+                                        config.configType === opt.id
+                                            ? "border-blue-700 bg-blue-700"
+                                            : "border-gray-300"
+                                    }`}
                                 />
                                 <span className="text-base">{opt.icon}</span>
                                 <span className="font-semibold text-sm text-gray-800">
@@ -235,8 +243,10 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
                                         )}
                                     />
                                 </Field>
+                                {/* ✅ hint posé ici, sur le bon champ, contextuel */}
                                 <Field
                                     label="Responsable de cette zone"
+                                    hint={zoneResponsableHint}
                                     error={
                                         errors[`zone_${zone.id}_responsible`]
                                     }
@@ -359,13 +369,13 @@ function GenerationPreview({ config, classes }) {
                 → <strong>{classes.length} fiches classes</strong> — 1 par
                 enseignant, noms pré-remplis
             </p>
-            {multiZone ? (
+            {multiZone && (
                 <p>
                     →{" "}
                     <strong>{zones.length} fiches de synthèse par zone</strong>{" "}
                     — 1 par responsable de zone
                 </p>
-            ) : null}
+            )}
             <p>
                 → <strong>1 fiche de synthèse globale</strong> — cellule de
                 crise, {multiZone ? "toutes zones" : "toutes classes"}
@@ -391,6 +401,7 @@ function Section({ title, children }) {
         </div>
     );
 }
+
 function Field({ label, hint, error, children }) {
     return (
         <div className="space-y-1">
@@ -412,6 +423,7 @@ function Field({ label, hint, error, children }) {
         </div>
     );
 }
+
 function cx(error) {
     return `w-full rounded-lg border px-3 py-2 text-sm outline-none transition-colors focus:ring-2 focus:ring-blue-500
     ${error ? "border-red-400 bg-red-50" : "border-gray-300 bg-white hover:border-gray-400"}`;
