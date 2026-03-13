@@ -1,33 +1,76 @@
 import { useState } from "react";
 
+let _zoneId = 1;
+const newZone = () => ({ id: `z${++_zoneId}`, name: "", responsible: "" });
+
 const DEFAULTS = {
     schoolName: "",
-    zone: "",
     responsible: "",
     configType: "A",
+    zones: [{ id: "z1", name: "", responsible: "" }],
+    classZoneMap: {},
 };
 
 export default function ConfigForm({ classes, onSubmit, onBack }) {
     const [config, setConfig] = useState({
         ...DEFAULTS,
         configType: classes.length > 3 ? "B" : "A",
+        classZoneMap: Object.fromEntries(classes.map((cl) => [cl, "z1"])),
     });
     const [errors, setErrors] = useState({});
 
-    function set(field, value) {
-        setConfig((prev) => ({ ...prev, [field]: value }));
-        setErrors((prev) => ({ ...prev, [field]: undefined }));
-    }
+    // ── Setters ────────────────────────────────────────────────────
+    const setField = (field, value) => {
+        setConfig((p) => ({ ...p, [field]: value }));
+        setErrors((p) => ({ ...p, [field]: undefined }));
+    };
 
-    function validate() {
+    const updateZone = (id, field, value) => {
+        setConfig((p) => ({
+            ...p,
+            zones: p.zones.map((z) =>
+                z.id === id ? { ...z, [field]: value } : z
+            ),
+        }));
+        setErrors((p) => ({ ...p, [`zone_${id}_${field}`]: undefined }));
+    };
+
+    const addZone = () =>
+        setConfig((p) => ({ ...p, zones: [...p.zones, newZone()] }));
+
+    const removeZone = (id) =>
+        setConfig((p) => {
+            const zones = p.zones.filter((z) => z.id !== id);
+            const fallback = zones[0]?.id;
+            const classZoneMap = Object.fromEntries(
+                Object.entries(p.classZoneMap).map(([cl, zid]) => [
+                    cl,
+                    zid === id ? fallback : zid,
+                ])
+            );
+            return { ...p, zones, classZoneMap };
+        });
+
+    const setClassZone = (cl, zoneId) =>
+        setConfig((p) => ({
+            ...p,
+            classZoneMap: { ...p.classZoneMap, [cl]: zoneId },
+        }));
+
+    // ── Validation ─────────────────────────────────────────────────
+    const validate = () => {
         const e = {};
         if (!config.schoolName.trim()) e.schoolName = "Champ obligatoire";
-        if (!config.zone.trim()) e.zone = "Champ obligatoire";
         if (!config.responsible.trim()) e.responsible = "Champ obligatoire";
+        config.zones.forEach((z) => {
+            if (!z.name.trim()) e[`zone_${z.id}_name`] = "Champ obligatoire";
+            if (!z.responsible.trim())
+                e[`zone_${z.id}_responsible`] = "Champ obligatoire";
+        });
         return e;
-    }
+    };
 
-    function handleSubmit(e) {
+    const handleSubmit = (e) => {
         e.preventDefault();
         const errs = validate();
         if (Object.keys(errs).length > 0) {
@@ -35,13 +78,10 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
             return;
         }
         onSubmit(config);
-    }
+    };
 
-    // Le hint du responsable change selon l'option
-    const responsableHint =
-        config.configType === "B"
-            ? "Personne en charge de la cellule de crise (directeur/trice, ou adulte désigné dans le PPMS). Son nom figurera sur la fiche de synthèse."
-            : "Adulte responsable de la zone de confinement. Son nom figurera en en-tête de la fiche.";
+    const multiZone = config.zones.length > 1;
+    const showClassMap = config.configType === "B" && multiZone;
 
     return (
         <form onSubmit={handleSubmit} noValidate className="space-y-8">
@@ -50,8 +90,8 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
                     Étape 3 – Configuration des fiches
                 </h2>
                 <p className="text-sm text-gray-500">
-                    Ces informations figureront dans l'en-tête — conformes au
-                    modèle Eduscol PPMS 2024.
+                    Ces informations figureront dans l'en-tête — modèle Eduscol
+                    PPMS 2024.
                 </p>
             </div>
 
@@ -62,21 +102,8 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
                         type="text"
                         placeholder="École élémentaire Jules Ferry"
                         value={config.schoolName}
-                        onChange={(e) => set("schoolName", e.target.value)}
+                        onChange={(e) => setField("schoolName", e.target.value)}
                         className={cx(errors.schoolName)}
-                    />
-                </Field>
-            </Section>
-
-            {/* Zone */}
-            <Section title="Zone de mise en sûreté">
-                <Field label="Lieu de confinement" error={errors.zone}>
-                    <input
-                        type="text"
-                        placeholder="Gymnase, salle polyvalente, couloir B…"
-                        value={config.zone}
-                        onChange={(e) => set("zone", e.target.value)}
-                        className={cx(errors.zone)}
                     />
                 </Field>
                 <Field
@@ -85,14 +112,20 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
                             ? "Responsable de la cellule de crise"
                             : "Responsable de zone"
                     }
-                    hint={responsableHint}
+                    hint={
+                        config.configType === "B"
+                            ? "Directeur/trice ou adulte désigné dans le PPMS. Apparaît sur la fiche de synthèse globale."
+                            : "Adulte responsable de la zone. Apparaît en en-tête de la fiche."
+                    }
                     error={errors.responsible}
                 >
                     <input
                         type="text"
                         placeholder="Mme Dupont, directrice"
                         value={config.responsible}
-                        onChange={(e) => set("responsible", e.target.value)}
+                        onChange={(e) =>
+                            setField("responsible", e.target.value)
+                        }
                         className={cx(errors.responsible)}
                     />
                 </Field>
@@ -107,49 +140,169 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
                     </p>
                 )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {OPTIONS.map((opt) => (
-                        <OptionCard
+                    {[
+                        {
+                            id: "A",
+                            icon: "📄",
+                            label: "Option A – Fiche unique",
+                            desc: "Tous les élèves sur un même document. Adapté pour les petites écoles (≤ 3 classes).",
+                        },
+                        {
+                            id: "B",
+                            icon: "📋",
+                            label: "Option B – Fiche par classe",
+                            desc: "1 fiche par enseignant + 1 fiche de synthèse cellule de crise. Recommandé à partir de 4 classes.",
+                        },
+                    ].map((opt) => (
+                        <button
                             key={opt.id}
-                            opt={opt}
-                            selected={config.configType === opt.id}
-                            onSelect={() => set("configType", opt.id)}
-                        />
+                            type="button"
+                            onClick={() => setField("configType", opt.id)}
+                            className={`text-left rounded-xl border-2 p-4 transition-all outline-none focus-visible:ring-2 focus-visible:ring-blue-500
+                ${config.configType === opt.id ? "border-blue-700 bg-blue-50" : "border-gray-200 bg-white hover:border-blue-300"}`}
+                        >
+                            <div className="flex items-center gap-2 mb-1.5">
+                                <span
+                                    className={`w-4 h-4 rounded-full border-2 shrink-0 ${config.configType === opt.id ? "border-blue-700 bg-blue-700" : "border-gray-300"}`}
+                                />
+                                <span className="text-base">{opt.icon}</span>
+                                <span className="font-semibold text-sm text-gray-800">
+                                    {opt.label}
+                                </span>
+                            </div>
+                            <p className="text-xs text-gray-500 pl-6">
+                                {opt.desc}
+                            </p>
+                        </button>
                     ))}
                 </div>
             </Section>
 
-            {/* Récapitulatif */}
-            {classes.length > 0 && (
-                <Section title="Aperçu de la génération">
-                    <div className="bg-gray-50 rounded-lg border border-gray-200 p-4 text-sm text-gray-700 space-y-1">
-                        {config.configType === "A" ? (
-                            <p>
-                                → <strong>1 document</strong> — {classes.length}{" "}
-                                classe{classes.length > 1 ? "s" : ""}{" "}
-                                regroupées, tous élèves listés
-                            </p>
-                        ) : (
-                            <>
-                                <p>
-                                    →{" "}
-                                    <strong>
-                                        {classes.length} fiches classes
-                                    </strong>{" "}
-                                    — 1 par enseignant, noms pré-remplis
-                                </p>
-                                <p>
-                                    → <strong>1 fiche de synthèse</strong> —
-                                    cellule de crise, totaux par classe
-                                </p>
-                            </>
-                        )}
-                        <p className="text-gray-400 text-xs pt-1">
-                            La date de l'événement est laissée vierge sur les
-                            fiches (à compléter à la main).
-                        </p>
+            {/* Zones */}
+            <Section title={`Zone${multiZone ? "s" : ""} de mise en sûreté`}>
+                <div className="space-y-3">
+                    {config.zones.map((zone, idx) => (
+                        <div
+                            key={zone.id}
+                            className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3"
+                        >
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-semibold text-gray-600">
+                                    {multiZone
+                                        ? `Zone ${idx + 1}`
+                                        : "Zone de confinement"}
+                                </span>
+                                {multiZone && (
+                                    <button
+                                        type="button"
+                                        onClick={() => removeZone(zone.id)}
+                                        className="text-xs text-red-500 hover:text-red-700 transition-colors"
+                                    >
+                                        Supprimer
+                                    </button>
+                                )}
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <Field
+                                    label="Lieu"
+                                    error={errors[`zone_${zone.id}_name`]}
+                                >
+                                    <input
+                                        type="text"
+                                        placeholder="Gymnase, salle polyvalente…"
+                                        value={zone.name}
+                                        onChange={(e) =>
+                                            updateZone(
+                                                zone.id,
+                                                "name",
+                                                e.target.value
+                                            )
+                                        }
+                                        className={cx(
+                                            errors[`zone_${zone.id}_name`]
+                                        )}
+                                    />
+                                </Field>
+                                <Field
+                                    label="Responsable de cette zone"
+                                    error={
+                                        errors[`zone_${zone.id}_responsible`]
+                                    }
+                                >
+                                    <input
+                                        type="text"
+                                        placeholder="M. Martin, enseignant"
+                                        value={zone.responsible}
+                                        onChange={(e) =>
+                                            updateZone(
+                                                zone.id,
+                                                "responsible",
+                                                e.target.value
+                                            )
+                                        }
+                                        className={cx(
+                                            errors[
+                                                `zone_${zone.id}_responsible`
+                                            ]
+                                        )}
+                                    />
+                                </Field>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                <button
+                    type="button"
+                    onClick={addZone}
+                    className="mt-2 flex items-center gap-2 text-sm text-blue-700 hover:text-blue-900 transition-colors"
+                >
+                    <span className="text-lg leading-none">＋</span> Ajouter une
+                    zone
+                </button>
+            </Section>
+
+            {/* Affectation classes → zones (Option B + multi-zones) */}
+            {showClassMap && (
+                <Section title="Affectation des classes aux zones">
+                    <p className="text-sm text-gray-500 mb-3">
+                        Indiquer dans quelle zone chaque classe se confine.
+                    </p>
+                    <div className="space-y-2">
+                        {classes.map((cl) => (
+                            <div
+                                key={cl}
+                                className="flex items-center gap-4 bg-white border border-gray-200 rounded-lg px-4 py-2.5"
+                            >
+                                <span className="text-sm font-medium text-gray-700 w-32 shrink-0">
+                                    {cl}
+                                </span>
+                                <select
+                                    value={
+                                        config.classZoneMap[cl] ||
+                                        config.zones[0]?.id
+                                    }
+                                    onChange={(e) =>
+                                        setClassZone(cl, e.target.value)
+                                    }
+                                    className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                                >
+                                    {config.zones.map((z, i) => (
+                                        <option key={z.id} value={z.id}>
+                                            Zone {i + 1}
+                                            {z.name ? ` — ${z.name}` : ""}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        ))}
                     </div>
                 </Section>
             )}
+
+            {/* Récapitulatif */}
+            <Section title="Documents qui seront générés">
+                <GenerationPreview config={config} classes={classes} />
+            </Section>
 
             <div className="flex flex-wrap gap-3">
                 <button
@@ -170,45 +323,52 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
     );
 }
 
-// ── Sous-composants (inchangés) ───────────────────────────────────
-
-const OPTIONS = [
-    {
-        id: "A",
-        label: "Option A – Fiche unique",
-        desc: "Tous les élèves sur un même document. Adapté pour les petites écoles (≤ 3 classes).",
-        icon: "📄",
-    },
-    {
-        id: "B",
-        label: "Option B – Fiche par classe",
-        desc: "1 fiche par enseignant + 1 fiche de synthèse cellule de crise. Recommandé à partir de 4 classes.",
-        icon: "📋",
-    },
-];
-
-function OptionCard({ opt, selected, onSelect }) {
-    return (
-        <button
-            type="button"
-            onClick={onSelect}
-            className={`text-left rounded-xl border-2 p-4 transition-all outline-none focus-visible:ring-2 focus-visible:ring-blue-500
-        ${selected ? "border-blue-700 bg-blue-50" : "border-gray-200 bg-white hover:border-blue-300"}`}
-        >
-            <div className="flex items-center gap-2 mb-1.5">
-                <span
-                    className={`w-4 h-4 rounded-full border-2 shrink-0 ${selected ? "border-blue-700 bg-blue-700" : "border-gray-300"}`}
-                />
-                <span className="text-lg">{opt.icon}</span>
-                <span className="font-semibold text-sm text-gray-800">
-                    {opt.label}
-                </span>
+function GenerationPreview({ config, classes }) {
+    const { configType, zones } = config;
+    const multiZone = zones.length > 1;
+    if (configType === "A") {
+        return (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-700 space-y-1">
+                <p>
+                    → <strong>1 document DOCX</strong> — {classes.length} classe
+                    {classes.length > 1 ? "s" : ""}, tous élèves listés
+                </p>
+                <p className="text-gray-400 text-xs pt-1">
+                    La date est laissée vierge (à compléter à la main lors de
+                    l'événement).
+                </p>
             </div>
-            <p className="text-xs text-gray-500 pl-6">{opt.desc}</p>
-        </button>
+        );
+    }
+    const docCount = classes.length + (multiZone ? zones.length : 0) + 1;
+    return (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-700 space-y-1.5">
+            <p>
+                → <strong>{classes.length} fiches classes</strong> — 1 par
+                enseignant, noms pré-remplis
+            </p>
+            {multiZone ? (
+                <p>
+                    →{" "}
+                    <strong>{zones.length} fiches de synthèse par zone</strong>{" "}
+                    — 1 par responsable de zone
+                </p>
+            ) : null}
+            <p>
+                → <strong>1 fiche de synthèse globale</strong> — cellule de
+                crise, {multiZone ? "toutes zones" : "toutes classes"}
+            </p>
+            <p className="text-blue-700 font-semibold pt-1">
+                = {docCount} fichiers DOCX (téléchargés en ZIP)
+            </p>
+            <p className="text-gray-400 text-xs">
+                La date est laissée vierge (à compléter à la main).
+            </p>
+        </div>
     );
 }
 
+// ── Helpers ────────────────────────────────────────────────────────
 function Section({ title, children }) {
     return (
         <div className="space-y-4">
@@ -219,7 +379,6 @@ function Section({ title, children }) {
         </div>
     );
 }
-
 function Field({ label, hint, error, children }) {
     return (
         <div className="space-y-1">
@@ -241,7 +400,6 @@ function Field({ label, hint, error, children }) {
         </div>
     );
 }
-
 function cx(error) {
     return `w-full rounded-lg border px-3 py-2 text-sm outline-none transition-colors focus:ring-2 focus:ring-blue-500
     ${error ? "border-red-400 bg-red-50" : "border-gray-300 bg-white hover:border-gray-400"}`;
