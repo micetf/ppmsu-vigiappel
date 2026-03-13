@@ -25,8 +25,13 @@ const ALL_BORDERS = {
     left: BORDER,
     right: BORDER,
 };
-const SHADE_HEADER = { type: ShadingType.SOLID, fill: "1E3A5F", color: "auto" };
-const SHADE_ALT = { type: ShadingType.SOLID, fill: "EEF2F7", color: "auto" };
+
+const SHADE_HEADER = {
+    type: ShadingType.SOLID,
+    fill: "D9D9D9",
+    color: "D9D9D9",
+};
+const SHADE_ALT = { type: ShadingType.SOLID, fill: "F2F2F2", color: "F2F2F2" };
 const PAGE_MARGIN = { top: 1134, bottom: 1134, left: 1134, right: 1134 }; // 2 cm
 const TABLE_W = 9400; // DXA (~16,6 cm) pour une page A4 avec marges 2 cm
 
@@ -118,7 +123,7 @@ function cell(text, { header = false, alt = false, center = false, w } = {}) {
                 [
                     run(text, {
                         bold: header,
-                        color: header ? "FFFFFF" : "000000",
+                        color: "000000",
                         size: header ? 18 : 20,
                     }),
                 ],
