@@ -174,14 +174,9 @@ const makeDateLine = () =>
 
 // ── Helpers config ─────────────────────────────────────────────────
 const getCrisisCell = (config) => {
-    const cc = config.staff.filter((s) => s.rattachement === "cellule");
-    if (cc.length === 0) return "Non défini";
-    return cc
-        .map(
-            (s) =>
-                `${s.prenom} ${s.nom}${s.fonction ? " (" + s.fonction + ")" : ""}`
-        )
-        .join(", ");
+    const { nom, prenom, fonction } = config.crisisCell ?? {};
+    if (!nom?.trim()) return "Non défini";
+    return `${prenom} ${nom}`.trim() + (fonction ? ` (${fonction})` : "");
 };
 
 const getClassStaff = (config, classe) =>

@@ -12,9 +12,13 @@ const newStaff = () => ({
     rattachement: "",
 });
 
-const FONCTIONS = [
+const FONCTIONS_CRISE = [
     "Directeur/trice",
     "Directeur/trice adjoint(e)",
+    "Enseignant(e) faisant fonction",
+];
+
+const FONCTIONS_STAFF = [
     "AESH",
     "ATSEM",
     "Service civique",
@@ -30,6 +34,7 @@ const DEFAULTS = {
     configType: "A",
     zones: [{ id: "z1", name: "", responsible: "" }],
     classZoneMap: {},
+    crisisCell: { nom: "", prenom: "", fonction: "Directeur/trice" }, // ← champ dédié
     staff: [],
     blankIntervenantRows: 5,
 };
@@ -46,6 +51,14 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
     const setField = (field, value) => {
         setConfig((p) => ({ ...p, [field]: value }));
         setErrors((p) => ({ ...p, [field]: undefined }));
+    };
+
+    const setCrisisCell = (field, value) => {
+        setConfig((p) => ({
+            ...p,
+            crisisCell: { ...p.crisisCell, [field]: value },
+        }));
+        setErrors((p) => ({ ...p, [`crisisCell_${field}`]: undefined }));
     };
 
     // ── Zones ──────────────────────────────────────────────────────
@@ -72,7 +85,6 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
                     zid === id ? fallback : zid,
                 ])
             );
-            // Réaffecter le staff de cette zone vers la première zone restante
             const staff = p.staff.map((s) =>
                 s.rattachement === id
                     ? { ...s, rattachement: fallback ?? "" }
@@ -108,6 +120,8 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
     const validate = () => {
         const e = {};
         if (!config.schoolName.trim()) e.schoolName = "Champ obligatoire";
+        if (!config.crisisCell.nom.trim())
+            e.crisisCell_nom = "Champ obligatoire";
         config.zones.forEach((z) => {
             if (!z.name.trim()) e[`zone_${z.id}_name`] = "Champ obligatoire";
             if (!z.responsible.trim())
@@ -118,11 +132,6 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
             if (!s.rattachement)
                 e[`staff_${s.id}_rattachement`] = "Obligatoire";
         });
-        const hasCellule = config.staff.some(
-            (s) => s.rattachement === "cellule"
-        );
-        if (!hasCellule)
-            e._cellule = "Aucun adulte n'est désigné pour la cellule de crise.";
         return e;
     };
 
@@ -139,9 +148,8 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
     const multiZone = config.zones.length > 1;
     const showClassMap = config.configType === "B" && multiZone;
 
-    // Options de rattachement pour le staff
+    // Options rattachement staff — "cellule" retirée, gérée séparément
     const rattachementOptions = [
-        { value: "cellule", label: "🔴 Cellule de crise (directeur/trice)" },
         ...config.zones.map((z, i) => ({
             value: z.id,
             label: `Zone ${i + 1}${z.name ? " — " + z.name : ""} (adulte sans classe)`,
@@ -282,7 +290,7 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
                                     hint={
                                         multiZone
                                             ? "Adulte désigné pour coordonner les remontées vers la cellule de crise. Différent du directeur/de la directrice."
-                                            : "Adulte désigné pour centraliser les fiches de recensement et les remonter à la cellule de crise. Peut être le/la directeur/trice si aucun autre adulte n'est disponible."
+                                            : "Adulte désigné pour centraliser les fiches et les remonter à la cellule de crise."
                                     }
                                     error={
                                         errors[`zone_${zone.id}_responsible`]
@@ -358,179 +366,240 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
                 </Section>
             )}
 
-            {/* Personnels de l'école */}
+            {/* Personnels */}
             <Section title="Personnels de l'école">
-                <p className="text-sm text-gray-500">
-                    Saisir tous les adultes présents dans l'école, hors
-                    enseignants (extraits automatiquement du CSV). Chaque adulte
-                    sera pointé sur la fiche correspondant à son rattachement.
-                </p>
-
-                {errors._cellule && (
-                    <div
-                        role="alert"
-                        className="bg-red-50 border border-red-300 text-red-700 rounded-lg px-4 py-3 text-sm flex gap-2"
-                    >
-                        <span>⚠️</span>
-                        <span>{errors._cellule}</span>
+                {/* ── Cellule de crise — champ dédié, non supprimable ── */}
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                        <span className="text-base">🔴</span>
+                        <span className="text-sm font-semibold text-red-800">
+                            Responsable de la cellule de crise
+                        </span>
+                        <span className="ml-auto text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">
+                            Obligatoire
+                        </span>
                     </div>
-                )}
-
-                {config.staff.length > 0 && (
-                    <div className="space-y-2">
-                        {/* En-tête colonnes */}
-                        <div className="hidden sm:grid grid-cols-12 gap-2 px-3 text-xs text-gray-400 font-medium">
-                            <span className="col-span-2">Nom *</span>
-                            <span className="col-span-2">Prénom</span>
-                            <span className="col-span-3">Fonction</span>
-                            <span className="col-span-4">Rattachement *</span>
+                    <p className="text-xs text-red-700">
+                        Pilote la cellule de crise : communications externes
+                        (112, IEN, mairie), centralise les bilans. Apparaît en
+                        en-tête de la synthèse globale.
+                    </p>
+                    <div className="grid grid-cols-12 gap-2">
+                        <div className="col-span-5 sm:col-span-4">
+                            <input
+                                type="text"
+                                placeholder="Nom *"
+                                value={config.crisisCell.nom}
+                                onChange={(e) =>
+                                    setCrisisCell("nom", e.target.value)
+                                }
+                                className={
+                                    cx(errors.crisisCell_nom) + " text-sm"
+                                }
+                            />
+                            {errors.crisisCell_nom && (
+                                <p
+                                    className="text-xs text-red-500 mt-0.5"
+                                    role="alert"
+                                >
+                                    {errors.crisisCell_nom}
+                                </p>
+                            )}
                         </div>
-                        {config.staff.map((s) => (
-                            <div
-                                key={s.id}
-                                className="grid grid-cols-12 gap-2 items-start bg-gray-50 border border-gray-200 rounded-lg p-3"
+                        <div className="col-span-4 sm:col-span-4">
+                            <input
+                                type="text"
+                                placeholder="Prénom"
+                                value={config.crisisCell.prenom}
+                                onChange={(e) =>
+                                    setCrisisCell("prenom", e.target.value)
+                                }
+                                className={cx() + " text-sm"}
+                            />
+                        </div>
+                        <div className="col-span-3 sm:col-span-4">
+                            <select
+                                value={config.crisisCell.fonction}
+                                onChange={(e) =>
+                                    setCrisisCell("fonction", e.target.value)
+                                }
+                                className="w-full rounded-lg border border-gray-300 px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                             >
-                                {/* Nom */}
-                                <div className="col-span-6 sm:col-span-2">
-                                    <input
-                                        type="text"
-                                        placeholder="Nom"
-                                        value={s.nom}
-                                        onChange={(e) =>
-                                            updateStaff(
-                                                s.id,
-                                                "nom",
-                                                e.target.value
-                                            )
-                                        }
-                                        className={
-                                            cx(errors[`staff_${s.id}_nom`]) +
-                                            " text-xs"
-                                        }
-                                    />
-                                    {errors[`staff_${s.id}_nom`] && (
-                                        <p className="text-xs text-red-500 mt-0.5">
-                                            {errors[`staff_${s.id}_nom`]}
-                                        </p>
-                                    )}
-                                </div>
-                                {/* Prénom */}
-                                <div className="col-span-6 sm:col-span-2">
-                                    <input
-                                        type="text"
-                                        placeholder="Prénom"
-                                        value={s.prenom}
-                                        onChange={(e) =>
-                                            updateStaff(
-                                                s.id,
-                                                "prenom",
-                                                e.target.value
-                                            )
-                                        }
-                                        className={cx() + " text-xs"}
-                                    />
-                                </div>
-                                {/* Fonction */}
-                                <div className="col-span-7 sm:col-span-3">
-                                    <select
-                                        value={s.fonction}
-                                        onChange={(e) =>
-                                            updateStaff(
-                                                s.id,
-                                                "fonction",
-                                                e.target.value
-                                            )
-                                        }
-                                        className="w-full rounded-lg border border-gray-300 px-2 py-2 text-xs outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                                    >
-                                        <option value="">— Fonction —</option>
-                                        {FONCTIONS.map((f) => (
-                                            <option key={f} value={f}>
-                                                {f}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                                {/* Rattachement */}
-                                <div className="col-span-5 sm:col-span-4">
-                                    <select
-                                        value={s.rattachement}
-                                        onChange={(e) =>
-                                            updateStaff(
-                                                s.id,
-                                                "rattachement",
-                                                e.target.value
-                                            )
-                                        }
-                                        className={`w-full rounded-lg border px-2 py-2 text-xs outline-none focus:ring-2 focus:ring-blue-500 bg-white
-                      ${errors[`staff_${s.id}_rattachement`] ? "border-red-400 bg-red-50" : "border-gray-300"}`}
-                                    >
-                                        <option value="">
-                                            — Rattachement —
-                                        </option>
-                                        {rattachementOptions.map((o) => (
-                                            <option
-                                                key={o.value}
-                                                value={o.value}
-                                            >
-                                                {o.label}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    {errors[`staff_${s.id}_rattachement`] && (
-                                        <p className="text-xs text-red-500 mt-0.5">
-                                            {
-                                                errors[
-                                                    `staff_${s.id}_rattachement`
-                                                ]
-                                            }
-                                        </p>
-                                    )}
-                                </div>
-                                {/* Supprimer */}
-                                <div className="col-span-12 sm:col-span-1 flex sm:justify-center">
-                                    <button
-                                        type="button"
-                                        onClick={() => removeStaff(s.id)}
-                                        className="text-xs text-red-500 hover:text-red-700 transition-colors"
-                                        aria-label="Supprimer ce personnel"
-                                    >
-                                        ✕
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
+                                {FONCTIONS_CRISE.map((f) => (
+                                    <option key={f} value={f}>
+                                        {f}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
-                )}
+                </div>
 
-                <button
-                    type="button"
-                    onClick={addStaff}
-                    className="mt-2 flex items-center gap-2 text-sm text-blue-700 hover:text-blue-900 transition-colors"
-                >
-                    <span className="text-lg leading-none">＋</span> Ajouter un
-                    personnel
-                </button>
+                {/* ── Autres personnels — liste ouverte ── */}
+                <div className="space-y-2 mt-2">
+                    <p className="text-sm text-gray-500">
+                        Autres adultes présents dans l'école, hors enseignants
+                        (extraits du CSV). Chaque adulte sera pointé sur la
+                        fiche de sa zone ou de sa classe.
+                    </p>
 
-                {/* Lignes vierges intervenants */}
-                <div className="flex items-center gap-3 mt-4 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
-                    <label className="text-sm text-gray-600 flex-1">
-                        Lignes vierges pour intervenants / personnels variables
-                        du jour
-                    </label>
-                    <input
-                        type="number"
-                        min="0"
-                        max="20"
-                        value={config.blankIntervenantRows}
-                        onChange={(e) =>
-                            setField(
-                                "blankIntervenantRows",
-                                Math.max(0, parseInt(e.target.value) || 0)
-                            )
-                        }
-                        className="w-16 rounded-lg border border-gray-300 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 text-center"
-                    />
+                    {config.staff.length > 0 && (
+                        <div className="space-y-2">
+                            <div className="hidden sm:grid grid-cols-12 gap-2 px-3 text-xs text-gray-400 font-medium">
+                                <span className="col-span-3">Nom *</span>
+                                <span className="col-span-2">Prénom</span>
+                                <span className="col-span-3">Fonction</span>
+                                <span className="col-span-3">
+                                    Rattachement *
+                                </span>
+                            </div>
+                            {config.staff.map((s) => (
+                                <div
+                                    key={s.id}
+                                    className="grid grid-cols-12 gap-2 items-start bg-gray-50 border border-gray-200 rounded-lg p-3"
+                                >
+                                    <div className="col-span-6 sm:col-span-3">
+                                        <input
+                                            type="text"
+                                            placeholder="Nom"
+                                            value={s.nom}
+                                            onChange={(e) =>
+                                                updateStaff(
+                                                    s.id,
+                                                    "nom",
+                                                    e.target.value
+                                                )
+                                            }
+                                            className={
+                                                cx(
+                                                    errors[`staff_${s.id}_nom`]
+                                                ) + " text-xs"
+                                            }
+                                        />
+                                        {errors[`staff_${s.id}_nom`] && (
+                                            <p className="text-xs text-red-500 mt-0.5">
+                                                {errors[`staff_${s.id}_nom`]}
+                                            </p>
+                                        )}
+                                    </div>
+                                    <div className="col-span-6 sm:col-span-2">
+                                        <input
+                                            type="text"
+                                            placeholder="Prénom"
+                                            value={s.prenom}
+                                            onChange={(e) =>
+                                                updateStaff(
+                                                    s.id,
+                                                    "prenom",
+                                                    e.target.value
+                                                )
+                                            }
+                                            className={cx() + " text-xs"}
+                                        />
+                                    </div>
+                                    <div className="col-span-7 sm:col-span-3">
+                                        <select
+                                            value={s.fonction}
+                                            onChange={(e) =>
+                                                updateStaff(
+                                                    s.id,
+                                                    "fonction",
+                                                    e.target.value
+                                                )
+                                            }
+                                            className="w-full rounded-lg border border-gray-300 px-2 py-2 text-xs outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                                        >
+                                            <option value="">
+                                                — Fonction —
+                                            </option>
+                                            {FONCTIONS_STAFF.map((f) => (
+                                                <option key={f} value={f}>
+                                                    {f}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="col-span-4 sm:col-span-3">
+                                        <select
+                                            value={s.rattachement}
+                                            onChange={(e) =>
+                                                updateStaff(
+                                                    s.id,
+                                                    "rattachement",
+                                                    e.target.value
+                                                )
+                                            }
+                                            className={`w-full rounded-lg border px-2 py-2 text-xs outline-none focus:ring-2 focus:ring-blue-500 bg-white
+                        ${errors[`staff_${s.id}_rattachement`] ? "border-red-400 bg-red-50" : "border-gray-300"}`}
+                                        >
+                                            <option value="">
+                                                — Zone / Classe —
+                                            </option>
+                                            {rattachementOptions.map((o) => (
+                                                <option
+                                                    key={o.value}
+                                                    value={o.value}
+                                                >
+                                                    {o.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        {errors[
+                                            `staff_${s.id}_rattachement`
+                                        ] && (
+                                            <p className="text-xs text-red-500 mt-0.5">
+                                                {
+                                                    errors[
+                                                        `staff_${s.id}_rattachement`
+                                                    ]
+                                                }
+                                            </p>
+                                        )}
+                                    </div>
+                                    <div className="col-span-1 flex justify-center pt-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => removeStaff(s.id)}
+                                            className="text-xs text-red-400 hover:text-red-700 transition-colors"
+                                            aria-label="Supprimer"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    <button
+                        type="button"
+                        onClick={addStaff}
+                        className="mt-1 flex items-center gap-2 text-sm text-blue-700 hover:text-blue-900 transition-colors"
+                    >
+                        <span className="text-lg leading-none">＋</span> Ajouter
+                        un personnel
+                    </button>
+
+                    {/* Lignes vierges intervenants */}
+                    <div className="flex items-center gap-3 mt-3 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
+                        <label className="text-sm text-gray-600 flex-1">
+                            Lignes vierges pour intervenants / personnels
+                            variables du jour
+                        </label>
+                        <input
+                            type="number"
+                            min="0"
+                            max="20"
+                            value={config.blankIntervenantRows}
+                            onChange={(e) =>
+                                setField(
+                                    "blankIntervenantRows",
+                                    Math.max(0, parseInt(e.target.value) || 0)
+                                )
+                            }
+                            className="w-16 rounded-lg border border-gray-300 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 text-center"
+                        />
+                    </div>
                 </div>
             </Section>
 
@@ -560,17 +629,19 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
 
 // ── Récapitulatif ──────────────────────────────────────────────────
 function GenerationPreview({ config, classes }) {
-    const { configType, zones, staff } = config;
+    const { configType, zones, crisisCell } = config;
     const multiZone = zones.length > 1;
-    const cellule = staff.filter((s) => s.rattachement === "cellule");
     const fileCount = (configType === "A" ? 1 : zones.length) + 1;
+    const criseName = crisisCell.nom
+        ? `${crisisCell.prenom} ${crisisCell.nom}`.trim()
+        : "—";
 
     return (
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-700 space-y-1.5">
             {configType === "A" ? (
                 <p>
                     → <strong>PPMS_Zone_{zones[0]?.name || "Zone"}.docx</strong>{" "}
-                    — fiche recensement (adultes + élèves)
+                    — adultes + tous élèves
                 </p>
             ) : (
                 zones.map((z, i) => (
@@ -587,7 +658,7 @@ function GenerationPreview({ config, classes }) {
                                     : true
                             ).length
                         }{" "}
-                        classes
+                        classe(s)
                     </p>
                 ))
             )}
@@ -595,18 +666,13 @@ function GenerationPreview({ config, classes }) {
                 → <strong>PPMS_Cellule_Crise.docx</strong> — synthèse globale
                 {multiZone ? " + synthèses par zone" : ""}
             </p>
-            {cellule.length > 0 && (
-                <p className="text-gray-500 text-xs">
-                    Cellule de crise :{" "}
-                    {cellule.map((s) => `${s.prenom} ${s.nom}`).join(", ")}
-                </p>
-            )}
+            <p className="text-gray-500 text-xs">
+                Cellule de crise : {criseName}
+            </p>
             <p className="text-blue-700 font-semibold pt-1">
-                = {fileCount} fichiers DOCX (ZIP)
+                = {fileCount} fichiers DOCX (ZIP) · 1 fichier = 1 mallette PPMS
             </p>
-            <p className="text-gray-400 text-xs">
-                1 fichier = 1 mallette PPMS · La date est laissée vierge.
-            </p>
+            <p className="text-gray-400 text-xs">La date est laissée vierge.</p>
         </div>
     );
 }
