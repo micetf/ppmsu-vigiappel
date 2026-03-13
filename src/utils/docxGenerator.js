@@ -308,7 +308,8 @@ function makeClassChildren(
     zone,
     schoolName,
     override = null,
-    staffById = {}
+    staffById = {},
+    config = null
 ) {
     const WA = [2200, 1800, 2200, 800, 800, 800, 800];
     const COLS_A = [
@@ -367,7 +368,19 @@ function makeClassChildren(
             });
         }
     }
+    const extraTeachers = (config?.classExtraTeachers?.[classe] || []).filter(
+        (et) => et.nom.trim()
+    );
 
+    // Dans allAdults, après le bloc teacher/override :
+    allAdults.push(
+        ...extraTeachers.map((et) => ({
+            nom: et.nom,
+            prenom: et.prenom,
+            fonction: et.fonction || "Décharge",
+            muted: false, // toujours actif avec cases à cocher
+        }))
+    );
     allAdults.push(
         ...classStaff.map((s) => ({
             nom: s.nom,

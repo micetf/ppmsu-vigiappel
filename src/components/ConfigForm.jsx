@@ -44,7 +44,8 @@ const DEFAULTS = {
     zones: [{ id: "z1", name: "", responsibleNom: "", responsiblePrenom: "" }],
     classZoneMap: {},
     crisisCell: { nom: "", prenom: "", fonction: "Directeur/trice" },
-    classOverrides: {}, // ← nouveau
+    classOverrides: {},
+    classExtraTeachers: {},
     staff: [],
     blankIntervenantRows: 5,
 };
@@ -706,14 +707,21 @@ export default function ConfigForm({
     );
 }
 
-// ── Section Encadrement PPMS ───────────────────────────────────────
+// ── Section Configuration avancée par classe ───────────────────────
 function EncadrementSection({ classes, teacherByClass, config, setConfig }) {
     const [open, setOpen] = useState(false);
     const overrides = config.classOverrides || {};
-    const activeCount = Object.values(overrides).filter(
+    const extraTeachers = config.classExtraTeachers || {};
+
+    const activeOverrides = Object.values(overrides).filter(
         (o) => o?.teacherUnavailable
     ).length;
+    const activeExtras = Object.values(extraTeachers).filter(
+        (v) => v?.length > 0
+    ).length;
+    const totalActive = activeOverrides + activeExtras;
 
+    // ── Overrides ──
     const toggleClass = (cl, enabled) =>
         setConfig((p) => ({
             ...p,
@@ -741,6 +749,40 @@ function EncadrementSection({ classes, teacherByClass, config, setConfig }) {
             },
         }));
 
+    // ── Décharges ──
+    const addExtraTeacher = (cl) =>
+        setConfig((p) => ({
+            ...p,
+            classExtraTeachers: {
+                ...p.classExtraTeachers,
+                [cl]: [
+                    ...(p.classExtraTeachers[cl] || []),
+                    { nom: "", prenom: "", fonction: "Décharge" },
+                ],
+            },
+        }));
+
+    const updateExtraTeacher = (cl, idx, field, value) =>
+        setConfig((p) => {
+            const list = [...(p.classExtraTeachers[cl] || [])];
+            list[idx] = { ...list[idx], [field]: value };
+            return {
+                ...p,
+                classExtraTeachers: { ...p.classExtraTeachers, [cl]: list },
+            };
+        });
+
+    const removeExtraTeacher = (cl, idx) =>
+        setConfig((p) => {
+            const list = (p.classExtraTeachers[cl] || []).filter(
+                (_, i) => i !== idx
+            );
+            return {
+                ...p,
+                classExtraTeachers: { ...p.classExtraTeachers, [cl]: list },
+            };
+        });
+
     const staffOptions = config.staff.map((s) => ({
         value: s.id,
         label: [fullName(s.nom, s.prenom), s.fonction]
@@ -750,7 +792,7 @@ function EncadrementSection({ classes, teacherByClass, config, setConfig }) {
 
     return (
         <div className="border border-gray-200 rounded-xl overflow-hidden">
-            {/* En-tête accordéon */}
+            {/* Accordéon */}
             <button
                 type="button"
                 onClick={() => setOpen((o) => !o)}
@@ -759,17 +801,15 @@ function EncadrementSection({ classes, teacherByClass, config, setConfig }) {
             >
                 <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-semibold text-gray-700">
-                        Remplacements d'encadrement
+                        Configuration avancée par classe
                     </span>
-                    {activeCount > 0 ? (
+                    {totalActive > 0 ? (
                         <span className="bg-amber-100 text-amber-800 text-xs font-semibold px-2 py-0.5 rounded-full">
-                            {activeCount} remplacement
-                            {activeCount > 1 ? "s" : ""}
+                            {totalActive} modification
+                            {totalActive > 1 ? "s" : ""}
                         </span>
                     ) : (
-                        <span className="text-xs text-gray-400">
-                            Optionnel — aucun remplacement
-                        </span>
+                        <span className="text-xs text-gray-400">Optionnel</span>
                     )}
                 </div>
                 <svg
@@ -789,204 +829,237 @@ function EncadrementSection({ classes, teacherByClass, config, setConfig }) {
 
             {open && (
                 <div className="divide-y divide-gray-100">
-                    {/* Explication */}
                     <p className="px-4 py-3 text-xs text-gray-500 leading-relaxed bg-white">
-                        Cocher si un enseignant ne sera pas avec son groupe
-                        pendant le PPMS : directeur/trice à la cellule de crise,
-                        responsable de zone, toute autre mission. Son nom
-                        restera visible sur la fiche avec mention de sa mission
-                        — il faut alors désigner l'adulte qui encadrera
-                        réellement la classe.
+                        <strong>Décharge / temps partiel</strong> — ajouter
+                        un(e) co-titulaire permanent(e) de la classe. Les deux
+                        enseignant(e)s apparaissent sur la fiche avec leurs
+                        cases à cocher. <strong>Remplacement</strong> — si un(e)
+                        enseignant(e) ne sera pas avec son groupe pendant le
+                        PPMS (directrice à la cellule de crise, responsable de
+                        zone…), son nom reste visible avec mention de sa mission
+                        et un(e) remplaçant(e) est désigné(e).
                     </p>
 
-                    {/* Une ligne par classe */}
                     {classes.map((cl) => {
                         const teacher = teacherByClass[cl];
                         const override = overrides[cl];
+                        const extras = extraTeachers[cl] || [];
                         const isOverridden = !!override?.teacherUnavailable;
 
                         return (
                             <div
                                 key={cl}
-                                className="px-4 py-3 space-y-3 bg-white"
+                                className="px-4 py-4 space-y-4 bg-white"
                             >
-                                {/* Toggle */}
-                                <label className="flex items-start gap-3 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={isOverridden}
-                                        onChange={(e) =>
-                                            toggleClass(cl, e.target.checked)
-                                        }
-                                        className="mt-0.5 w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
-                                    />
-                                    <div>
-                                        <span className="text-sm font-semibold text-gray-800">
-                                            {cl}
-                                        </span>
-                                        {teacher ? (
-                                            <span className="text-sm text-gray-500">
-                                                {" "}
-                                                — {teacher} absent(e) du groupe
-                                            </span>
-                                        ) : (
-                                            <span className="text-sm text-gray-400 italic">
-                                                {" "}
-                                                — enseignant(e) non détecté(e)
+                                {/* En-tête classe */}
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm font-bold text-gray-800 bg-gray-100 px-2 py-0.5 rounded">
+                                        {cl}
+                                    </span>
+                                    <span className="text-sm text-gray-500">
+                                        {teacher || (
+                                            <em className="text-gray-400">
+                                                Enseignant(e) non détecté(e)
                                                 dans le CSV
-                                            </span>
+                                            </em>
                                         )}
-                                    </div>
-                                </label>
+                                    </span>
+                                </div>
 
-                                {/* Formulaire de remplacement */}
-                                {isOverridden && (
-                                    <div className="ml-7 bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-3">
-                                        <p className="text-xs font-semibold text-amber-900">
-                                            Adulte qui encadrera cette classe
-                                            pendant le PPMS :
-                                        </p>
+                                {/* ── Décharge / co-titulaire ── */}
+                                <div className="space-y-2">
+                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                        Co-titulaire(s) / Décharge(s)
+                                    </p>
 
-                                        {/* Source toggle */}
-                                        <div className="flex gap-2">
-                                            {[
-                                                {
-                                                    value: "staff",
-                                                    label: "Choisir dans la liste",
-                                                },
-                                                {
-                                                    value: "manual",
-                                                    label: "Saisir manuellement",
-                                                },
-                                            ].map((opt) => (
-                                                <button
-                                                    key={opt.value}
-                                                    type="button"
-                                                    onClick={() =>
-                                                        updateOverride(cl, {
-                                                            substituteSource:
-                                                                opt.value,
-                                                        })
-                                                    }
-                                                    className={`text-xs px-3 py-1.5 rounded-lg border transition-colors
-                            ${
-                                override.substituteSource === opt.value
-                                    ? "bg-amber-600 text-white border-amber-600"
-                                    : "bg-white text-amber-700 border-amber-300 hover:border-amber-500"
-                            }`}
-                                                >
-                                                    {opt.label}
-                                                </button>
-                                            ))}
-                                        </div>
-
-                                        {/* Depuis la liste staff */}
-                                        {override.substituteSource ===
-                                            "staff" &&
-                                            (staffOptions.length > 0 ? (
-                                                <select
-                                                    value={
-                                                        override.substituteStaffId ||
-                                                        ""
-                                                    }
+                                    {extras.map((et, idx) => (
+                                        <div
+                                            key={idx}
+                                            className="flex flex-wrap items-end gap-2 bg-gray-50 border border-gray-200 rounded-lg p-3"
+                                        >
+                                            <div className="flex-1 min-w-30">
+                                                <label className="block text-xs font-medium text-gray-600 mb-1">
+                                                    NOM
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="BERNARD"
+                                                    value={et.nom}
                                                     onChange={(e) =>
-                                                        updateOverride(cl, {
-                                                            substituteStaffId:
-                                                                e.target.value,
-                                                        })
+                                                        updateExtraTeacher(
+                                                            cl,
+                                                            idx,
+                                                            "nom",
+                                                            toNom(
+                                                                e.target.value
+                                                            )
+                                                        )
                                                     }
-                                                    className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-400"
+                                                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                                />
+                                            </div>
+                                            <div className="flex-1 min-w-25">
+                                                <label className="block text-xs font-medium text-gray-600 mb-1">
+                                                    Prénom
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Claire"
+                                                    value={et.prenom}
+                                                    onChange={(e) =>
+                                                        updateExtraTeacher(
+                                                            cl,
+                                                            idx,
+                                                            "prenom",
+                                                            toPrenom(
+                                                                e.target.value
+                                                            )
+                                                        )
+                                                    }
+                                                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                                />
+                                            </div>
+                                            <div className="flex-1 min-w-25">
+                                                <label className="block text-xs font-medium text-gray-600 mb-1">
+                                                    Fonction
+                                                </label>
+                                                <select
+                                                    value={et.fonction}
+                                                    onChange={(e) =>
+                                                        updateExtraTeacher(
+                                                            cl,
+                                                            idx,
+                                                            "fonction",
+                                                            e.target.value
+                                                        )
+                                                    }
+                                                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
                                                 >
-                                                    <option value="">
-                                                        — Sélectionner un adulte
-                                                        —
-                                                    </option>
-                                                    {staffOptions.map((o) => (
+                                                    {[
+                                                        "Décharge",
+                                                        "Mi-temps",
+                                                        "Co-titulaire",
+                                                        "Remplaçant(e) habituel(le)",
+                                                    ].map((f) => (
                                                         <option
-                                                            key={o.value}
-                                                            value={o.value}
+                                                            key={f}
+                                                            value={f}
                                                         >
-                                                            {o.label}
+                                                            {f}
                                                         </option>
                                                     ))}
                                                 </select>
-                                            ) : (
-                                                <p className="text-xs text-amber-700 bg-amber-100 rounded-lg px-3 py-2">
-                                                    Aucun adulte dans la section
-                                                    "Autres adultes". Renseigner
-                                                    d'abord la section
-                                                    ci-dessous, ou utiliser la
-                                                    saisie manuelle.
-                                                </p>
-                                            ))}
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    removeExtraTeacher(cl, idx)
+                                                }
+                                                className="text-xs text-red-400 hover:text-red-600 pb-2 shrink-0 transition-colors"
+                                                aria-label="Supprimer"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                    ))}
 
-                                        {/* Saisie manuelle */}
-                                        {override.substituteSource ===
-                                            "manual" && (
-                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => addExtraTeacher(cl)}
+                                        className="flex items-center gap-1.5 text-xs text-blue-700 hover:text-blue-900 transition-colors"
+                                    >
+                                        <span className="text-base leading-none">
+                                            ＋
+                                        </span>
+                                        Ajouter une décharge / co-titulaire
+                                    </button>
+                                </div>
+
+                                {/* ── Remplacement ── */}
+                                <div className="space-y-2 pt-2 border-t border-dashed border-gray-200">
+                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                        Remplacement d'encadrement PPMS
+                                    </p>
+
+                                    <label className="flex items-start gap-3 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={isOverridden}
+                                            onChange={(e) =>
+                                                toggleClass(
+                                                    cl,
+                                                    e.target.checked
+                                                )
+                                            }
+                                            className="mt-0.5 w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                                        />
+                                        <span className="text-sm text-gray-700">
+                                            {teacher ? (
+                                                <>
+                                                    <strong>{teacher}</strong>{" "}
+                                                    ne sera pas avec ce groupe
+                                                    pendant le PPMS
+                                                </>
+                                            ) : (
+                                                <>
+                                                    L'enseignant(e) ne sera pas
+                                                    avec ce groupe pendant le
+                                                    PPMS
+                                                </>
+                                            )}
+                                        </span>
+                                    </label>
+
+                                    {isOverridden && (
+                                        <div className="ml-7 bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-3">
+                                            <p className="text-xs font-semibold text-amber-900">
+                                                Adulte qui encadrera ce groupe
+                                                pendant le PPMS :
+                                            </p>
+
+                                            <div className="flex gap-2">
                                                 {[
                                                     {
-                                                        key: "substituteNom",
-                                                        label: "NOM",
-                                                        placeholder: "GARCIA",
-                                                        transform: toNom,
+                                                        value: "staff",
+                                                        label: "Choisir dans la liste",
                                                     },
                                                     {
-                                                        key: "substitutePrenom",
-                                                        label: "Prénom",
-                                                        placeholder: "Ana",
-                                                        transform: toPrenom,
+                                                        value: "manual",
+                                                        label: "Saisir manuellement",
                                                     },
-                                                ].map(
-                                                    ({
-                                                        key,
-                                                        label,
-                                                        placeholder,
-                                                        transform,
-                                                    }) => (
-                                                        <div key={key}>
-                                                            <label className="block text-xs font-medium text-amber-800 mb-1">
-                                                                {label}
-                                                            </label>
-                                                            <input
-                                                                type="text"
-                                                                placeholder={
-                                                                    placeholder
-                                                                }
-                                                                value={
-                                                                    override[
-                                                                        key
-                                                                    ] || ""
-                                                                }
-                                                                onChange={(e) =>
-                                                                    updateOverride(
-                                                                        cl,
-                                                                        {
-                                                                            [key]: transform(
-                                                                                e
-                                                                                    .target
-                                                                                    .value
-                                                                            ),
-                                                                        }
-                                                                    )
-                                                                }
-                                                                className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-400"
-                                                            />
-                                                        </div>
-                                                    )
-                                                )}
-                                                <div>
-                                                    <label className="block text-xs font-medium text-amber-800 mb-1">
-                                                        Fonction
-                                                    </label>
+                                                ].map((opt) => (
+                                                    <button
+                                                        key={opt.value}
+                                                        type="button"
+                                                        onClick={() =>
+                                                            updateOverride(cl, {
+                                                                substituteSource:
+                                                                    opt.value,
+                                                            })
+                                                        }
+                                                        className={`text-xs px-3 py-1.5 rounded-lg border transition-colors
+                              ${
+                                  override.substituteSource === opt.value
+                                      ? "bg-amber-600 text-white border-amber-600"
+                                      : "bg-white text-amber-700 border-amber-300 hover:border-amber-500"
+                              }`}
+                                                    >
+                                                        {opt.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+
+                                            {override.substituteSource ===
+                                                "staff" &&
+                                                (staffOptions.length > 0 ? (
                                                     <select
                                                         value={
-                                                            override.substituteFonction ||
+                                                            override.substituteStaffId ||
                                                             ""
                                                         }
                                                         onChange={(e) =>
                                                             updateOverride(cl, {
-                                                                substituteFonction:
+                                                                substituteStaffId:
                                                                     e.target
                                                                         .value,
                                                             })
@@ -994,24 +1067,135 @@ function EncadrementSection({ classes, teacherByClass, config, setConfig }) {
                                                         className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-400"
                                                     >
                                                         <option value="">
-                                                            — Fonction —
+                                                            — Sélectionner un
+                                                            adulte —
                                                         </option>
-                                                        {FONCTIONS_STAFF.map(
-                                                            (f) => (
+                                                        {staffOptions.map(
+                                                            (o) => (
                                                                 <option
-                                                                    key={f}
-                                                                    value={f}
+                                                                    key={
+                                                                        o.value
+                                                                    }
+                                                                    value={
+                                                                        o.value
+                                                                    }
                                                                 >
-                                                                    {f}
+                                                                    {o.label}
                                                                 </option>
                                                             )
                                                         )}
                                                     </select>
+                                                ) : (
+                                                    <p className="text-xs text-amber-700 bg-amber-100 rounded-lg px-3 py-2">
+                                                        Aucun adulte dans
+                                                        "Autres adultes".
+                                                        Renseigner d'abord cette
+                                                        section, ou utiliser la
+                                                        saisie manuelle.
+                                                    </p>
+                                                ))}
+
+                                            {override.substituteSource ===
+                                                "manual" && (
+                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                                    {[
+                                                        {
+                                                            key: "substituteNom",
+                                                            label: "NOM",
+                                                            placeholder:
+                                                                "GARCIA",
+                                                            transform: toNom,
+                                                        },
+                                                        {
+                                                            key: "substitutePrenom",
+                                                            label: "Prénom",
+                                                            placeholder: "Ana",
+                                                            transform: toPrenom,
+                                                        },
+                                                    ].map(
+                                                        ({
+                                                            key,
+                                                            label,
+                                                            placeholder,
+                                                            transform,
+                                                        }) => (
+                                                            <div key={key}>
+                                                                <label className="block text-xs font-medium text-amber-800 mb-1">
+                                                                    {label}
+                                                                </label>
+                                                                <input
+                                                                    type="text"
+                                                                    placeholder={
+                                                                        placeholder
+                                                                    }
+                                                                    value={
+                                                                        override[
+                                                                            key
+                                                                        ] || ""
+                                                                    }
+                                                                    onChange={(
+                                                                        e
+                                                                    ) =>
+                                                                        updateOverride(
+                                                                            cl,
+                                                                            {
+                                                                                [key]: transform(
+                                                                                    e
+                                                                                        .target
+                                                                                        .value
+                                                                                ),
+                                                                            }
+                                                                        )
+                                                                    }
+                                                                    className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-400"
+                                                                />
+                                                            </div>
+                                                        )
+                                                    )}
+                                                    <div>
+                                                        <label className="block text-xs font-medium text-amber-800 mb-1">
+                                                            Fonction
+                                                        </label>
+                                                        <select
+                                                            value={
+                                                                override.substituteFonction ||
+                                                                ""
+                                                            }
+                                                            onChange={(e) =>
+                                                                updateOverride(
+                                                                    cl,
+                                                                    {
+                                                                        substituteFonction:
+                                                                            e
+                                                                                .target
+                                                                                .value,
+                                                                    }
+                                                                )
+                                                            }
+                                                            className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-400"
+                                                        >
+                                                            <option value="">
+                                                                — Fonction —
+                                                            </option>
+                                                            {FONCTIONS_STAFF.map(
+                                                                (f) => (
+                                                                    <option
+                                                                        key={f}
+                                                                        value={
+                                                                            f
+                                                                        }
+                                                                    >
+                                                                        {f}
+                                                                    </option>
+                                                                )
+                                                            )}
+                                                        </select>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         );
                     })}
