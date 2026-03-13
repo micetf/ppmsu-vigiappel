@@ -11,13 +11,13 @@ export default function GenerationPanel({
     onBack,
 }) {
     const [files, setFiles] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(true); // ✅ true dès le départ, pas dans l'effet
     const [error, setError] = useState(null);
     const [zipping, setZipping] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
-        setLoading(true);
+        // ✅ setLoading(true) supprimé — déjà initialisé
         generateAll(config, csvData)
             .then((result) => {
                 if (!cancelled) {
@@ -34,7 +34,7 @@ export default function GenerationPanel({
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [config, csvData]); // ✅ dépendances complètes
 
     const handleDownloadOne = (file) => saveAs(file.blob, file.name);
 
@@ -61,7 +61,6 @@ export default function GenerationPanel({
                 </p>
             </div>
 
-            {/* État : chargement */}
             {loading && (
                 <div className="flex items-center gap-3 text-sm text-gray-500 py-8 justify-center">
                     <svg
@@ -87,14 +86,12 @@ export default function GenerationPanel({
                 </div>
             )}
 
-            {/* État : erreur */}
             {error && (
                 <div className="bg-red-50 border border-red-300 text-red-700 rounded-lg px-4 py-3 text-sm">
                     ⚠️ {error}
                 </div>
             )}
 
-            {/* État : fichiers prêts */}
             {files && (
                 <div className="space-y-4">
                     <p className="text-sm font-medium text-gray-700">
@@ -102,7 +99,6 @@ export default function GenerationPanel({
                         prêt{files.length > 1 ? "s" : ""}
                     </p>
 
-                    {/* Cartes de téléchargement */}
                     <div className="space-y-3">
                         {files.map((file) => (
                             <div
@@ -153,7 +149,6 @@ export default function GenerationPanel({
                         ))}
                     </div>
 
-                    {/* Option secondaire : tout en ZIP */}
                     {files.length > 1 && (
                         <div className="pt-2 border-t border-gray-100 flex justify-end">
                             <button
@@ -184,7 +179,6 @@ export default function GenerationPanel({
                 </div>
             )}
 
-            {/* Navigation */}
             <div className="flex gap-3 pt-2">
                 <button
                     type="button"
