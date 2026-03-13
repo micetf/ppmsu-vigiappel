@@ -5,30 +5,64 @@ export default function FileUpload({ onParsed }) {
     const [dragging, setDragging] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [fileStatuses, setFileStatuses] = useState([]); // ← nouveau
     const inputRef = useRef(null);
 
-    async function handleFile(file) {
-        if (!file) return;
-        if (!file.name.toLowerCase().endsWith(".csv")) {
-            setError("Seuls les fichiers .csv sont acceptés.");
+    async function handleFiles(fileList) {
+        const files = Array.from(fileList).filter((f) =>
+            f.name.toLowerCase().endsWith(".csv")
+        );
+        if (files.length === 0) {
+            setError("Aucun fichier .csv détecté.");
             return;
         }
         setError(null);
         setLoading(true);
-        try {
-            const result = await parseCSV(file);
-            onParsed(result);
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
+        setFileStatuses([]);
+
+        const results = [];
+        const statuses = [];
+
+        for (const file of files) {
+            try {
+                const result = await parseCSV(file);
+                results.push(result);
+                statuses.push({
+                    name: file.name,
+                    rows: result.totalRows,
+                    ok: true,
+                });
+            } catch (err) {
+                statuses.push({
+                    name: file.name,
+                    rows: 0,
+                    ok: false,
+                    error: err.message,
+                });
+            }
         }
+
+        setFileStatuses(statuses);
+        setLoading(false);
+
+        const hasErrors = statuses.some((s) => !s.ok);
+        if (hasErrors && results.length === 0) {
+            setError("Aucun fichier valide importé.");
+            return;
+        }
+
+        // Fusion de tous les datasets en un seul
+        const merged = results.flatMap((r) => r.data);
+        // Récupère l'union de tous les champs (en conservant l'ordre de référence)
+        const fields = [...new Set(results.flatMap((r) => r.fields))];
+
+        onParsed({ data: merged, fields, totalRows: merged.length });
     }
 
     function onDrop(e) {
         e.preventDefault();
         setDragging(false);
-        handleFile(e.dataTransfer.files[0]);
+        handleFiles(e.dataTransfer.files);
     }
 
     return (
@@ -38,19 +72,16 @@ export default function FileUpload({ onParsed }) {
                     Étape 1 – Importer la liste d'élèves
                 </h2>
                 <p className="text-sm text-gray-500">
-                    Colonnes attendues :{" "}
-                    <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs">
-                        Classe ou regroupement ; Enseignant(s) ; Nom ; Prénom ;
-                        Né(e) le ; Sexe ; Niveau
-                    </code>
+                    Un seul CSV (export école complet){" "}
+                    <span className="text-gray-400">ou</span> plusieurs CSV
+                    classe par classe — les deux sont supportés.
                 </p>
             </div>
 
-            {/* Zone drag & drop */}
             <div
                 role="button"
                 tabIndex={0}
-                aria-label="Zone de dépôt de fichier CSV"
+                aria-label="Zone de dépôt de fichiers CSV"
                 className={`border-2 border-dashed rounded-xl p-14 text-center cursor-pointer transition-colors outline-none
           focus-visible:ring-2 focus-visible:ring-blue-500
           ${dragging ? "border-blue-500 bg-blue-50" : "border-gray-300 bg-white hover:border-blue-400 hover:bg-gray-50"}`}
@@ -69,20 +100,21 @@ export default function FileUpload({ onParsed }) {
                     ref={inputRef}
                     type="file"
                     accept=".csv"
+                    multiple // ← seul ajout ici
                     className="hidden"
-                    onChange={(e) => handleFile(e.target.files[0])}
+                    onChange={(e) => handleFiles(e.target.files)}
                 />
                 <div className="text-5xl mb-3" aria-hidden>
                     📂
                 </div>
                 {loading ? (
                     <p className="text-blue-700 font-medium animate-pulse">
-                        Analyse du fichier…
+                        Analyse des fichiers…
                     </p>
                 ) : (
                     <>
                         <p className="font-medium text-gray-700">
-                            Glisser-déposer le fichier CSV ici
+                            Glisser-déposer un ou plusieurs fichiers CSV
                         </p>
                         <p className="text-sm text-gray-400 mt-1">
                             ou cliquer pour sélectionner
@@ -91,7 +123,33 @@ export default function FileUpload({ onParsed }) {
                 )}
             </div>
 
-            {/* Erreur */}
+            {/* Statut par fichier */}
+            {fileStatuses.length > 0 && (
+                <ul className="space-y-1.5">
+                    {fileStatuses.map((s, i) => (
+                        <li
+                            key={i}
+                            className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2
+              ${s.ok ? "bg-green-50 text-green-800 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}
+                        >
+                            <span>{s.ok ? "✅" : "⚠️"}</span>
+                            <span className="font-medium truncate">
+                                {s.name}
+                            </span>
+                            {s.ok ? (
+                                <span className="ml-auto text-green-600">
+                                    {s.rows} élève{s.rows > 1 ? "s" : ""}
+                                </span>
+                            ) : (
+                                <span className="ml-auto text-red-500">
+                                    {s.error}
+                                </span>
+                            )}
+                        </li>
+                    ))}
+                </ul>
+            )}
+
             {error && (
                 <div
                     role="alert"
@@ -102,7 +160,6 @@ export default function FileUpload({ onParsed }) {
                 </div>
             )}
 
-            {/* Mention RGPD */}
             <p className="text-xs text-gray-400 flex items-center gap-1.5">
                 <span>🔒</span>
                 Vos données ne quittent jamais votre navigateur — traitement 100
