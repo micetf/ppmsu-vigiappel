@@ -59,7 +59,11 @@ const zoneResponsible = (zone) =>
 const getCrisisCell = (config) => {
     const { nom, prenom, fonction } = config.crisisCell ?? {};
     if (!nom?.trim()) return "Non défini";
-    return fullName(nom, prenom) + (fonction ? ` (${fonction})` : "");
+    const extra =
+        config.staff?.filter((s) => s.rattachement === "cellule") ?? [];
+    const base = fullName(nom, prenom) + (fonction ? ` (${fonction})` : "");
+    if (extra.length === 0) return base;
+    return base + ` + ${extra.length} autre${extra.length > 1 ? "s" : ""}`;
 };
 
 const getClassStaff = (config, classe) =>
@@ -710,7 +714,6 @@ function makeZoneSummaryChildren(
 function makeGlobalSummaryChildren(config, byClass, teacherByClass, classes) {
     const { zones, classZoneMap } = config;
     const multiZone = zones.length > 1;
-    const crisisCell = getCrisisCell(config);
     const totalStudents = classes.reduce(
         (s, cl) => s + (byClass[cl]?.length ?? 0),
         0
@@ -797,8 +800,18 @@ function makeGlobalSummaryChildren(config, byClass, teacherByClass, classes) {
 
     return [
         ...makeDocHeader(config.schoolName, "SYNTHÈSE CELLULE DE CRISE", [
-            `Responsable cellule de crise : ${crisisCell}`,
+            `Responsable cellule de crise : ${getCrisisCell(config)}`,
         ]),
+
+        // ✅ Table des adultes de la cellule de crise
+        ...makeCrisisCellAdultsChildren(config),
+
+        // Séparateur visuel
+        para([run("─".repeat(60), { color: "CCCCCC" })], {
+            spacing: { before: 200, after: 200 },
+        }),
+
+        // Tableau de synthèse classes/élèves existant
         makeTable([
             tableRow(
                 COLS.map((c, i) =>
@@ -819,6 +832,70 @@ function makeGlobalSummaryChildren(config, byClass, teacherByClass, classes) {
                 ),
             ],
             { spacing: { before: 120 } }
+        ),
+        makeDateLine(),
+    ];
+}
+
+function makeCrisisCellAdultsChildren(config) {
+    const WA = [2200, 1800, 2800, 800, 800, 800, 800];
+    const COLS_A = [
+        "NOM",
+        "PRÉNOM",
+        "FONCTION",
+        "PRÉSENT",
+        "ABSENT",
+        "MANQUANT",
+        "BLESSÉ",
+    ];
+
+    // Directeur/trice (toujours en premier)
+    const { nom, prenom, fonction } = config.crisisCell;
+    const crisisStaff = [
+        { nom, prenom, fonction: fonction || "Directeur/trice" },
+        // Autres membres rattachés à la cellule
+        ...config.staff
+            .filter((s) => s.rattachement === "cellule")
+            .map((s) => ({
+                nom: s.nom,
+                prenom: s.prenom,
+                fonction: s.fonction || "",
+            })),
+    ].filter((a) => a.nom.trim()); // sécurité : ignorer les lignes vides
+
+    const rows = crisisStaff.map((a) =>
+        tableRow([
+            cell(a.nom, { adult: true, w: WA[0] }),
+            cell(a.prenom, { adult: true, w: WA[1] }),
+            cell(a.fonction, { adult: true, w: WA[2] }),
+            cell(BOX, { adult: true, center: true, w: WA[3] }),
+            cell(BOX, { adult: true, center: true, w: WA[4] }),
+            cell(BOX, { adult: true, center: true, w: WA[5] }),
+            cell(BOX, { adult: true, center: true, w: WA[6] }),
+        ])
+    );
+
+    return [
+        sectionTitle(
+            `Équipe cellule de crise (${crisisStaff.length} personne${crisisStaff.length > 1 ? "s" : ""})`
+        ),
+        makeTable([
+            tableRow(
+                COLS_A.map((c, i) =>
+                    cell(c, { header: true, center: i >= 3, w: WA[i] })
+                ),
+                { isHeader: true }
+            ),
+            ...rows,
+        ]),
+        para(
+            [
+                run(
+                    "Numéros d'urgence : SAMU 15  ·  Police 17  ·  Pompiers 18  ·  Secours 112",
+                    { size: 18, bold: true, color: "1E3A5F" }
+                ),
+            ],
+            { spacing: { before: 200, after: 80 } }
         ),
         makeDateLine(),
     ];
@@ -849,7 +926,8 @@ function buildZoneDocument(
                 zone,
                 config.schoolName,
                 config.classOverrides?.[cl] || null,
-                staffById
+                staffById,
+                config
             )
         ),
     ];

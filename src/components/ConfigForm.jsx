@@ -215,6 +215,10 @@ export default function ConfigForm({
     };
 
     const rattachementOptions = [
+        {
+            value: "cellule",
+            label: "Cellule de crise (avec le/la directeur/trice)",
+        },
         ...config.zones.map((z, i) => ({
             value: z.id,
             label: `Zone ${i + 1}${z.name ? " — " + z.name : ""} (adulte sans classe)`,
@@ -613,9 +617,10 @@ export default function ConfigForm({
             <Section title="Autres adultes">
                 <p className="text-sm text-gray-500">
                     Saisir les adultes présents dans l'école hors enseignants —
-                    déjà extraits du CSV — et hors directeur/trice — déjà
-                    renseigné ci-dessus. Chaque adulte sera pointé sur la fiche
-                    de sa zone ou de sa classe.
+                    déjà extraits du CSV. Le/la directeur/trice est déjà
+                    renseigné(e) ci-dessus. Pour les autres membres de la
+                    cellule de crise (directeur/trice adjoint(e), secrétaire…),
+                    choisir le rattachement <strong>"Cellule de crise"</strong>.
                 </p>
 
                 {config.staff.length > 0 && (
