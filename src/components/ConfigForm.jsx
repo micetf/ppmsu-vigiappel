@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { toNom, toPrenom } from "../utils/formatName";
+import StepHelp from "./StepHelp";
 
 let _zoneId = 1;
 const newZone = () => ({
@@ -176,6 +177,36 @@ export default function ConfigForm({
 
     return (
         <form onSubmit={handleSubmit} noValidate className="space-y-8">
+            <StepHelp
+                stepKey="step3"
+                title="Comment remplir cette configuration ?"
+            >
+                <div className="pt-3 space-y-2">
+                    <p>
+                        <strong>🏫 Nom de l'école</strong> — tel qu'il
+                        apparaîtra en en-tête de chaque fiche.
+                    </p>
+                    <p>
+                        <strong>🔴 Cellule de crise</strong> — en général, vous
+                        (le/la directeur/trice). Cette personne coordonne les
+                        appels aux secours et ne gère pas de classe pendant le
+                        PPMS.
+                    </p>
+                    <p>
+                        <strong>📍 Zone de mise en sûreté</strong> — le lieu de
+                        confinement (gymnase, salle polyvalente…). Si votre
+                        école a plusieurs bâtiments, vous pouvez ajouter
+                        plusieurs zones.
+                    </p>
+                    <p>
+                        <strong>👥 Personnels</strong> — saisir les adultes
+                        présents dans l'école autres que les enseignants : AESH,
+                        ATSEM, personnel entretien, service civique… Ils seront
+                        intégrés aux fiches.
+                    </p>
+                </div>
+            </StepHelp>
+
             <div>
                 <h2 className="text-lg font-semibold text-gray-800 mb-1">
                     Étape 3 – Configuration des fiches

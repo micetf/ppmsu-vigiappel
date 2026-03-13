@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { saveAs } from "file-saver";
 import JSZip from "jszip";
 import { generateAll, slug } from "../utils/docxGenerator";
+import StepHelp from "./StepHelp";
 
 export default function GenerationPanel({
     config,
@@ -49,6 +50,31 @@ export default function GenerationPanel({
 
     return (
         <div className="space-y-6">
+            <StepHelp stepKey="step4" title="Que faire avec ces fichiers ?">
+                <ol className="space-y-2 pt-3 list-decimal list-inside">
+                    <li>
+                        Cliquer sur <strong>Télécharger</strong> pour chaque
+                        document
+                    </li>
+                    <li>Ouvrir chaque fichier dans Word ou LibreOffice</li>
+                    <li>
+                        <strong>Imprimer</strong> (Ctrl+P → Toutes les pages)
+                    </li>
+                    <li>
+                        Glisser les pages dans la <strong>mallette PPMS</strong>{" "}
+                        correspondante
+                    </li>
+                    <li>
+                        Placer la mallette dans la zone de confinement désignée
+                    </li>
+                </ol>
+                <p className="text-xs text-blue-700 bg-blue-100 rounded-lg px-3 py-2 mt-2">
+                    💡 En cas de changement d'élève en cours d'année, re-générez
+                    uniquement le fichier de la zone concernée et remplacez les
+                    pages correspondantes.
+                </p>
+            </StepHelp>
+
             <div>
                 <h2 className="text-lg font-semibold text-gray-800 mb-1">
                     Étape 4 – Téléchargement des fiches

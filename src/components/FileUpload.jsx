@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { parseCSV } from "../utils/csvParser";
+import StepHelp from "./StepHelp";
 
 export default function FileUpload({ onParsed }) {
     const [dragging, setDragging] = useState(false);
@@ -67,6 +68,23 @@ export default function FileUpload({ onParsed }) {
 
     return (
         <div className="space-y-5">
+            <StepHelp stepKey="step1" title="Comment importer ma liste d'élèves ?">
+  <p className="pt-3 font-medium text-blue-800">Ce dont vous avez besoin :</p>
+  <ul className="space-y-1 mt-1">
+    <li>📄 Un fichier CSV exporté depuis <strong>ONDE</strong> (Base élèves)</li>
+    <li>🔤 Colonnes attendues : <code className="bg-blue-100 px-1 rounded text-xs">Classe · Enseignant(s) · Nom · Prénom · Né(e) le · Sexe · Niveau</code></li>
+  </ul>
+  <p className="font-medium text-blue-800 mt-3">Comment exporter depuis ONDE :</p>
+  <ol className="space-y-1 mt-1 list-decimal list-inside">
+    <li>Aller dans <strong>ONDE → Exports → Liste des élèves</strong></li>
+    <li>Sélectionner toutes les classes</li>
+    <li>Cliquer sur <strong>Exporter en CSV</strong></li>
+    <li>Importer le fichier téléchargé ici</li>
+  </ol>
+  <p className="text-xs text-blue-700 bg-blue-100 rounded-lg px-3 py-2 mt-2">
+    🔒 Vos données ne quittent pas votre ordinateur. Aucun fichier n'est envoyé sur internet.
+  </p>
+</StepHelp>
             <div>
                 <h2 className="text-lg font-semibold text-gray-800 mb-1">
                     Étape 1 – Importer la liste d'élèves

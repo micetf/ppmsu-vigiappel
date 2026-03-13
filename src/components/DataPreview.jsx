@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { groupByClass } from "../utils/csvParser";
+import StepHelp from "./StepHelp";
 
 const PREVIEW_LIMIT = 20;
 const VISIBLE_COLS = [
@@ -18,6 +19,21 @@ export default function DataPreview({ result, onReset, onNext }) {
 
     return (
         <div className="space-y-6">
+            <StepHelp stepKey="step2" title="Que vérifier à cette étape ?">
+                <ul className="space-y-1 pt-3">
+                    <li>✅ Toutes vos classes sont-elles présentes ?</li>
+                    <li>✅ Les noms d'élèves semblent-ils corrects ?</li>
+                    <li>
+                        ✅ Les noms d'enseignants sont-ils associés aux bonnes
+                        classes ?
+                    </li>
+                </ul>
+                <p className="mt-2 text-blue-700">
+                    Si quelque chose semble incorrect, cliquez sur{" "}
+                    <strong>← Retour</strong>
+                    pour importer un autre fichier.
+                </p>
+            </StepHelp>
             <h2 className="text-lg font-semibold text-gray-800">
                 Étape 2 – Vérification des données importées
             </h2>
