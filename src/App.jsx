@@ -59,6 +59,7 @@ export default function App() {
                         classes={classes}
                         onSubmit={handleConfig}
                         onBack={() => setStep(2)}
+                        initialConfig={config}
                     />
                 )}
                 {step === 4 && config && (

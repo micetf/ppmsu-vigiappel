@@ -39,11 +39,19 @@ const DEFAULTS = {
     blankIntervenantRows: 5,
 };
 
-export default function ConfigForm({ classes, onSubmit, onBack }) {
-    const [config, setConfig] = useState({
-        ...DEFAULTS,
-        configType: classes.length > 3 ? "B" : "A",
-        classZoneMap: Object.fromEntries(classes.map((cl) => [cl, "z1"])),
+export default function ConfigForm({
+    classes,
+    onSubmit,
+    onBack,
+    initialConfig,
+}) {
+    const [config, setConfig] = useState(() => {
+        if (initialConfig) return initialConfig;
+        return {
+            ...DEFAULTS,
+            configType: classes.length > 3 ? "B" : "A",
+            classZoneMap: Object.fromEntries(classes.map((cl) => [cl, "z1"])),
+        };
     });
     const [errors, setErrors] = useState({});
 
