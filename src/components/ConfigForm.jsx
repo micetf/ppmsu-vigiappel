@@ -659,7 +659,6 @@ export default function ConfigForm({
 function GenerationPreview({ config, classes }) {
     const { configType, zones, crisisCell } = config;
     const multiZone = zones.length > 1;
-    const fileCount = (configType === "A" ? 1 : zones.length) + 1;
     const criseName = crisisCell.nom
         ? `${crisisCell.prenom} ${crisisCell.nom}`.trim()
         : "—";
