@@ -1,12 +1,9 @@
 import { useState } from "react";
 
-const today = new Date().toISOString().split("T")[0];
-
 const DEFAULTS = {
     schoolName: "",
     zone: "",
     responsible: "",
-    date: today,
     configType: "A",
 };
 
@@ -27,7 +24,6 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
         if (!config.schoolName.trim()) e.schoolName = "Champ obligatoire";
         if (!config.zone.trim()) e.zone = "Champ obligatoire";
         if (!config.responsible.trim()) e.responsible = "Champ obligatoire";
-        if (!config.date) e.date = "Champ obligatoire";
         return e;
     }
 
@@ -41,6 +37,12 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
         onSubmit(config);
     }
 
+    // Le hint du responsable change selon l'option
+    const responsableHint =
+        config.configType === "B"
+            ? "Personne en charge de la cellule de crise (directeur/trice, ou adulte désigné dans le PPMS). Son nom figurera sur la fiche de synthèse."
+            : "Adulte responsable de la zone de confinement. Son nom figurera en en-tête de la fiche.";
+
     return (
         <form onSubmit={handleSubmit} noValidate className="space-y-8">
             <div>
@@ -48,8 +50,8 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
                     Étape 3 – Configuration des fiches
                 </h2>
                 <p className="text-sm text-gray-500">
-                    Ces informations figureront dans l'en-tête de chaque fiche —
-                    conformes au modèle Eduscol PPMS 2024.
+                    Ces informations figureront dans l'en-tête — conformes au
+                    modèle Eduscol PPMS 2024.
                 </p>
             </div>
 
@@ -64,23 +66,11 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
                         className={cx(errors.schoolName)}
                     />
                 </Field>
-                <Field
-                    label="Date de l'événement"
-                    hint="Pré-remplie avec la date du jour — modifiable si impression à l'avance"
-                    error={errors.date}
-                >
-                    <input
-                        type="date"
-                        value={config.date}
-                        onChange={(e) => set("date", e.target.value)}
-                        className={cx(errors.date)}
-                    />
-                </Field>
             </Section>
 
-            {/* Zone de mise en sûreté */}
+            {/* Zone */}
             <Section title="Zone de mise en sûreté">
-                <Field label="Lieu" error={errors.zone}>
+                <Field label="Lieu de confinement" error={errors.zone}>
                     <input
                         type="text"
                         placeholder="Gymnase, salle polyvalente, couloir B…"
@@ -90,12 +80,17 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
                     />
                 </Field>
                 <Field
-                    label="Nom du responsable de zone"
+                    label={
+                        config.configType === "B"
+                            ? "Responsable de la cellule de crise"
+                            : "Responsable de zone"
+                    }
+                    hint={responsableHint}
                     error={errors.responsible}
                 >
                     <input
                         type="text"
-                        placeholder="M. Dupont, directeur"
+                        placeholder="Mme Dupont, directrice"
                         value={config.responsible}
                         onChange={(e) => set("responsible", e.target.value)}
                         className={cx(errors.responsible)}
@@ -123,15 +118,15 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
                 </div>
             </Section>
 
-            {/* Récapitulatif lecture seule */}
+            {/* Récapitulatif */}
             {classes.length > 0 && (
                 <Section title="Aperçu de la génération">
                     <div className="bg-gray-50 rounded-lg border border-gray-200 p-4 text-sm text-gray-700 space-y-1">
                         {config.configType === "A" ? (
                             <p>
-                                → <strong>1 document</strong> avec{" "}
-                                {classes.length} classe
-                                {classes.length > 1 ? "s" : ""} regroupées
+                                → <strong>1 document</strong> — {classes.length}{" "}
+                                classe{classes.length > 1 ? "s" : ""}{" "}
+                                regroupées, tous élèves listés
                             </p>
                         ) : (
                             <>
@@ -140,19 +135,22 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
                                     <strong>
                                         {classes.length} fiches classes
                                     </strong>{" "}
-                                    ({classes.join(", ")})
+                                    — 1 par enseignant, noms pré-remplis
                                 </p>
                                 <p>
-                                    → <strong>1 fiche de synthèse</strong> pour
-                                    la cellule de crise
+                                    → <strong>1 fiche de synthèse</strong> —
+                                    cellule de crise, totaux par classe
                                 </p>
                             </>
                         )}
+                        <p className="text-gray-400 text-xs pt-1">
+                            La date de l'événement est laissée vierge sur les
+                            fiches (à compléter à la main).
+                        </p>
                     </div>
                 </Section>
             )}
 
-            {/* Actions */}
             <div className="flex flex-wrap gap-3">
                 <button
                     type="button"
@@ -172,7 +170,7 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
     );
 }
 
-// ── Sous-composants ──────────────────────────────────────────────
+// ── Sous-composants (inchangés) ───────────────────────────────────
 
 const OPTIONS = [
     {
@@ -194,14 +192,12 @@ function OptionCard({ opt, selected, onSelect }) {
         <button
             type="button"
             onClick={onSelect}
-            className={`text-left rounded-xl border-2 p-4 transition-all outline-none
-        focus-visible:ring-2 focus-visible:ring-blue-500
+            className={`text-left rounded-xl border-2 p-4 transition-all outline-none focus-visible:ring-2 focus-visible:ring-blue-500
         ${selected ? "border-blue-700 bg-blue-50" : "border-gray-200 bg-white hover:border-blue-300"}`}
         >
             <div className="flex items-center gap-2 mb-1.5">
                 <span
-                    className={`w-4 h-4 rounded-full border-2 shrink-0
-          ${selected ? "border-blue-700 bg-blue-700" : "border-gray-300"}`}
+                    className={`w-4 h-4 rounded-full border-2 shrink-0 ${selected ? "border-blue-700 bg-blue-700" : "border-gray-300"}`}
                 />
                 <span className="text-lg">{opt.icon}</span>
                 <span className="font-semibold text-sm text-gray-800">
@@ -233,7 +229,9 @@ function Field({ label, hint, error, children }) {
                     *
                 </span>
             </label>
-            {hint && <p className="text-xs text-gray-400">{hint}</p>}
+            {hint && (
+                <p className="text-xs text-gray-400 leading-relaxed">{hint}</p>
+            )}
             {children}
             {error && (
                 <p className="text-xs text-red-500" role="alert">
@@ -245,7 +243,6 @@ function Field({ label, hint, error, children }) {
 }
 
 function cx(error) {
-    return `w-full rounded-lg border px-3 py-2 text-sm outline-none transition-colors
-    focus:ring-2 focus:ring-blue-500
+    return `w-full rounded-lg border px-3 py-2 text-sm outline-none transition-colors focus:ring-2 focus:ring-blue-500
     ${error ? "border-red-400 bg-red-50" : "border-gray-300 bg-white hover:border-gray-400"}`;
 }
