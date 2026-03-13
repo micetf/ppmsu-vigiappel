@@ -563,55 +563,37 @@ function GenerationPreview({ config, classes }) {
     const { configType, zones, staff, blankIntervenantRows } = config;
     const multiZone = zones.length > 1;
     const cellule = staff.filter((s) => s.rattachement === "cellule");
-
-    if (configType === "A") {
-        return (
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-700 space-y-1">
-                <p>
-                    → <strong>1 fiche de recensement</strong> — tous élèves +
-                    adultes rattachés aux classes
-                </p>
-                <p>
-                    → <strong>1 fiche adultes</strong> — personnels sans classe
-                    + {blankIntervenantRows} lignes vierges
-                </p>
-                <p className="text-blue-700 font-semibold pt-1">
-                    = 2 fichiers DOCX (ZIP)
-                </p>
-                <p className="text-gray-400 text-xs">
-                    La date est laissée vierge.
-                </p>
-            </div>
-        );
-    }
-
-    const docCount =
-        classes.length + // fiches classes
-        zones.length + // fiches adultes par zone
-        (multiZone ? zones.length : 0) + // synthèses par zone
-        1; // synthèse globale
+    const fileCount = (configType === "A" ? 1 : zones.length) + 1;
 
     return (
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-700 space-y-1.5">
-            <p>
-                → <strong>{classes.length} fiches classes</strong> — élèves +
-                adultes rattachés
-            </p>
-            <p>
-                →{" "}
-                <strong>
-                    {zones.length} fiche{zones.length > 1 ? "s" : ""} adultes
-                </strong>{" "}
-                — par zone, {blankIntervenantRows} lignes vierges intervenants
-            </p>
-            {multiZone && (
+            {configType === "A" ? (
                 <p>
-                    → <strong>{zones.length} synthèses par zone</strong>
+                    → <strong>PPMS_Zone_{zones[0]?.name || "Zone"}.docx</strong>{" "}
+                    — fiche recensement (adultes + élèves)
                 </p>
+            ) : (
+                zones.map((z, i) => (
+                    <p key={z.id}>
+                        →{" "}
+                        <strong>
+                            PPMS_Zone_{z.name || `Zone${i + 1}`}.docx
+                        </strong>{" "}
+                        — adultes +{" "}
+                        {
+                            classes.filter((cl) =>
+                                multiZone
+                                    ? config.classZoneMap[cl] === z.id
+                                    : true
+                            ).length
+                        }{" "}
+                        classes
+                    </p>
+                ))
             )}
             <p>
-                → <strong>1 synthèse globale</strong> — cellule de crise, élèves
-                + adultes
+                → <strong>PPMS_Cellule_Crise.docx</strong> — synthèse globale
+                {multiZone ? " + synthèses par zone" : ""}
             </p>
             {cellule.length > 0 && (
                 <p className="text-gray-500 text-xs">
@@ -620,9 +602,11 @@ function GenerationPreview({ config, classes }) {
                 </p>
             )}
             <p className="text-blue-700 font-semibold pt-1">
-                = {docCount} fichiers DOCX (ZIP)
+                = {fileCount} fichiers DOCX (ZIP)
             </p>
-            <p className="text-gray-400 text-xs">La date est laissée vierge.</p>
+            <p className="text-gray-400 text-xs">
+                1 fichier = 1 mallette PPMS · La date est laissée vierge.
+            </p>
         </div>
     );
 }
