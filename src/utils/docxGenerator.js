@@ -58,10 +58,6 @@ function para(children, opts = {}) {
     });
 }
 
-function pageBreak() {
-    return new Paragraph({ children: [new TextRun({ break: 1 })] });
-}
-
 // ── En-tête document ───────────────────────────────────────────────
 function makeDocHeader(schoolName, title, lines = []) {
     return [
@@ -245,7 +241,7 @@ function makeClassSheet(
         })),
     ];
 
-    const adultRows = allAdults.map((a, i) =>
+    const adultRows = allAdults.map((a) =>
         tableRow([
             cell(a.nom, { adult: true, w: WA[0] }),
             cell(a.prenom, { adult: true, w: WA[1] }),
