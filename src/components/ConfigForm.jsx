@@ -563,9 +563,6 @@ function GenerationPreview({ config, classes }) {
     const { configType, zones, staff, blankIntervenantRows } = config;
     const multiZone = zones.length > 1;
     const cellule = staff.filter((s) => s.rattachement === "cellule");
-    const zoneStaff = zones.map((z) =>
-        staff.filter((s) => s.rattachement === z.id)
-    );
 
     if (configType === "A") {
         return (
