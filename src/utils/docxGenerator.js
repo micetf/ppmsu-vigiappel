@@ -196,16 +196,16 @@ const makeDateLine = () =>
 // ── Constructeurs de contenu ───────────────────────────────────────
 
 function makeAdultsChildren(zone, zoneStaff, blankRows, schoolName) {
-    const W = [2200, 1800, 2200, 1200, 500, 500, 500, 500];
+    const W = [2200, 1600, 2000, 800, 700, 700, 700, 700];
     const COLS = [
         "NOM",
         "PRÉNOM",
         "FONCTION",
         "ZONE HABITUELLE",
-        "P",
-        "A",
-        "M",
-        "B",
+        "PRÉSENT",
+        "ABSENT",
+        "MANQUANT",
+        "BLESSÉ",
     ];
 
     const staffRows = zoneStaff.map((s, i) =>
@@ -408,15 +408,16 @@ function makeOptionAChildren(config, byClass, classes, teacherByClass) {
         }
     );
 
-    const W = [2000, 1600, 1400, 1100, 1100, 1100, 1100];
+    const W = [1400, 1800, 1400, 1000, 1000, 1000, 1000, 800];
     const COLS_S = [
-        "NOM",
-        "PRÉNOM",
         "CLASSE",
-        "PRÉSENT",
-        "ABSENT",
-        "MANQUANT",
-        "BLESSÉ",
+        "ENSEIGNANT(E)",
+        "ÉLÈVES INSCRITS",
+        "PRÉSENTS",
+        "ABSENTS",
+        "MANQUANTS",
+        "BLESSÉS",
+        "ADULTES PRÉSENTS",
     ];
     const totalStudents = classes.reduce(
         (s, cl) => s + (byClass[cl]?.length ?? 0),
@@ -564,7 +565,7 @@ function makeGlobalSummaryChildren(config, byClass, teacherByClass, classes) {
               "ZONE",
               "CLASSE",
               "ENSEIGNANT(E)",
-              "ÉLÈVES",
+              "ÉLÈVES INSCRITS",
               "PRÉSENTS",
               "ABSENTS",
               "MANQUANTS",
@@ -573,7 +574,7 @@ function makeGlobalSummaryChildren(config, byClass, teacherByClass, classes) {
         : [
               "CLASSE",
               "ENSEIGNANT(E)",
-              "ÉLÈVES THÉO.",
+              "ÉLÈVES INSCRITS",
               "PRÉSENTS",
               "ABSENTS",
               "MANQUANTS",
