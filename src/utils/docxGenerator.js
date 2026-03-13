@@ -38,6 +38,11 @@ const SHADE_ADULT = {
 };
 const PAGE_MARGIN = { top: 1134, bottom: 1134, left: 1134, right: 1134 };
 const TABLE_W = 9400;
+const SHADE_MUTED = {
+    type: ShadingType.SOLID,
+    fill: "F0F0F0",
+    color: "F0F0F0",
+};
 
 // ── Helpers ────────────────────────────────────────────────────────
 export const slug = (str) =>
@@ -84,25 +89,47 @@ const sectionTitle = (text) =>
 // ── Helpers tableau ────────────────────────────────────────────────
 function cell(
     text,
-    { header = false, alt = false, adult = false, center = false, w } = {}
+    {
+        header = false,
+        alt = false,
+        adult = false,
+        center = false,
+        w,
+        muted = false,
+    } = {}
 ) {
     const shading = header
         ? SHADE_HEADER
-        : adult
-          ? SHADE_ADULT
-          : alt
-            ? SHADE_ALT
-            : undefined;
+        : muted
+          ? SHADE_MUTED
+          : adult
+            ? SHADE_ADULT
+            : alt
+              ? SHADE_ALT
+              : undefined;
+    const color = muted ? "AAAAAA" : "000000";
     return new TableCell({
         borders: ALL_BORDERS,
         shading,
         width: w ? { size: w, type: WidthType.DXA } : undefined,
         margins: { top: 80, bottom: 80, left: 100, right: 100 },
         children: [
-            para([run(text, { bold: header, size: header ? 18 : 20 })], {
-                alignment: center ? AlignmentType.CENTER : AlignmentType.LEFT,
-                spacing: { before: 40, after: 40 },
-            }),
+            para(
+                [
+                    run(text, {
+                        bold: header,
+                        size: header ? 18 : 20,
+                        strike: muted,
+                        color,
+                    }),
+                ],
+                {
+                    alignment: center
+                        ? AlignmentType.CENTER
+                        : AlignmentType.LEFT,
+                    spacing: { before: 40, after: 40 },
+                }
+            ),
         ],
     });
 }
@@ -279,7 +306,9 @@ function makeClassChildren(
     teacher,
     classStaff,
     zone,
-    schoolName
+    schoolName,
+    override = null,
+    staffById = {}
 ) {
     const WA = [2200, 1800, 2200, 800, 800, 800, 800];
     const COLS_A = [
@@ -292,26 +321,82 @@ function makeClassChildren(
         "BLESSÉ",
     ];
 
-    const allAdults = [
-        ...(teacher
-            ? [{ nom: teacher, prenom: "", fonction: "Enseignant(e)" }]
-            : []),
+    // ── Construction de la liste d'adultes ──
+    const allAdults = [];
+
+    if (teacher) {
+        if (override?.teacherUnavailable) {
+            // Enseignant absent du groupe → ligne grisée barrée
+            allAdults.push({
+                nom: teacher,
+                prenom: "",
+                muted: true,
+                fonction: "Absent(e) du groupe — mission PPMS",
+            });
+
+            // Adulte substitut
+            let sub = null;
+            if (
+                override.substituteSource === "staff" &&
+                override.substituteStaffId
+            ) {
+                const s = staffById[override.substituteStaffId];
+                if (s)
+                    sub = {
+                        nom: s.nom,
+                        prenom: s.prenom,
+                        fonction: `${s.fonction || ""} — encadrant(e) PPMS`,
+                    };
+            } else if (
+                override.substituteSource === "manual" &&
+                override.substituteNom
+            ) {
+                sub = {
+                    nom: override.substituteNom,
+                    prenom: override.substitutePrenom || "",
+                    fonction: `${override.substituteFonction || ""} — encadrant(e) PPMS`,
+                };
+            }
+            if (sub) allAdults.push({ ...sub, muted: false });
+        } else {
+            allAdults.push({
+                nom: teacher,
+                prenom: "",
+                fonction: "Enseignant(e)",
+                muted: false,
+            });
+        }
+    }
+
+    allAdults.push(
         ...classStaff.map((s) => ({
             nom: s.nom,
             prenom: s.prenom,
             fonction: s.fonction || "",
-        })),
-    ];
+            muted: false,
+        }))
+    );
+
+    const activeAdults = allAdults.filter((a) => !a.muted);
 
     const adultRows = allAdults.map((a) =>
         tableRow([
-            cell(a.nom, { adult: true, w: WA[0] }),
-            cell(a.prenom, { adult: true, w: WA[1] }),
-            cell(a.fonction, { adult: true, w: WA[2] }),
-            cell(BOX, { adult: true, center: true, w: WA[3] }),
-            cell(BOX, { adult: true, center: true, w: WA[4] }),
-            cell(BOX, { adult: true, center: true, w: WA[5] }),
-            cell(BOX, { adult: true, center: true, w: WA[6] }),
+            cell(a.nom, { adult: !a.muted, muted: a.muted, w: WA[0] }),
+            cell(a.prenom, { adult: !a.muted, muted: a.muted, w: WA[1] }),
+            cell(a.fonction, { adult: !a.muted, muted: a.muted, w: WA[2] }),
+            ...(a.muted
+                ? [
+                      cell("—", { muted: true, center: true, w: WA[3] }),
+                      cell("—", { muted: true, center: true, w: WA[4] }),
+                      cell("—", { muted: true, center: true, w: WA[5] }),
+                      cell("—", { muted: true, center: true, w: WA[6] }),
+                  ]
+                : [
+                      cell(BOX, { adult: true, center: true, w: WA[3] }),
+                      cell(BOX, { adult: true, center: true, w: WA[4] }),
+                      cell(BOX, { adult: true, center: true, w: WA[5] }),
+                      cell(BOX, { adult: true, center: true, w: WA[6] }),
+                  ]),
         ])
     );
 
@@ -334,7 +419,9 @@ function makeClassChildren(
             `Classe : ${classe}`,
             `Zone : ${zone.name}   |   Responsable de zone : ${zoneResponsible(zone)}`,
         ]),
-        sectionTitle(`Adultes (${allAdults.length})`),
+        sectionTitle(
+            `Adultes (${activeAdults.length} actif${activeAdults.length > 1 ? "s" : ""})`
+        ),
         makeTable([
             tableRow(
                 COLS_A.map((c, i) =>
@@ -354,7 +441,7 @@ function makeClassChildren(
             ),
             ...studentRows,
         ]),
-        ...makeFooter(students.length, allAdults.length),
+        ...makeFooter(students.length, activeAdults.length),
     ];
 }
 
@@ -362,35 +449,97 @@ function makeOptionAChildren(config, byClass, classes, teacherByClass) {
     const zone = config.zones[0];
     const crisisCell = getCrisisCell(config);
 
-    const allAdults = [
-        ...classes
-            .filter((cl) => teacherByClass[cl])
-            .map((cl) => ({
-                nom: teacherByClass[cl],
-                prenom: "",
-                fonction: "Enseignant(e)",
-            })),
+    const staffById = Object.fromEntries(config.staff.map((s) => [s.id, s]));
+
+    const allAdults = [];
+    classes
+        .filter((cl) => teacherByClass[cl])
+        .forEach((cl) => {
+            const teacher = teacherByClass[cl];
+            const override = config.classOverrides?.[cl];
+            if (override?.teacherUnavailable) {
+                allAdults.push({
+                    nom: teacher,
+                    prenom: "",
+                    fonction: `Absent(e) du groupe ${cl} — mission PPMS`,
+                    muted: true,
+                });
+                let sub = null;
+                if (
+                    override.substituteSource === "staff" &&
+                    override.substituteStaffId
+                ) {
+                    const s = staffById[override.substituteStaffId];
+                    if (s)
+                        sub = {
+                            nom: s.nom,
+                            prenom: s.prenom,
+                            fonction: `${s.fonction || ""} — encadrant(e) ${cl}`,
+                        };
+                } else if (
+                    override.substituteSource === "manual" &&
+                    override.substituteNom
+                ) {
+                    sub = {
+                        nom: override.substituteNom,
+                        prenom: override.substitutePrenom || "",
+                        fonction: `${override.substituteFonction || ""} — encadrant(e) ${cl}`,
+                    };
+                }
+                if (sub) allAdults.push({ ...sub, muted: false });
+            } else {
+                allAdults.push({
+                    nom: teacher,
+                    prenom: "",
+                    fonction: "Enseignant(e)",
+                    muted: false,
+                });
+            }
+        });
+    allAdults.push(
         ...config.staff
             .filter((s) => s.rattachement !== "cellule")
             .map((s) => ({
                 nom: s.nom,
                 prenom: s.prenom,
                 fonction: s.fonction || "",
-            })),
-    ];
+                muted: false,
+            }))
+    );
 
     const WA = [2200, 1800, 2800, 500, 500, 500, 500];
     const COLS_A = ["NOM", "PRÉNOM", "FONCTION", "P", "A", "M", "B"];
 
     const adultRows = allAdults.map((a, i) =>
         tableRow([
-            cell(a.nom, { alt: i % 2 !== 0, w: WA[0] }),
-            cell(a.prenom, { alt: i % 2 !== 0, w: WA[1] }),
-            cell(a.fonction, { alt: i % 2 !== 0, w: WA[2] }),
-            cell(BOX, { alt: i % 2 !== 0, center: true, w: WA[3] }),
-            cell(BOX, { alt: i % 2 !== 0, center: true, w: WA[4] }),
-            cell(BOX, { alt: i % 2 !== 0, center: true, w: WA[5] }),
-            cell(BOX, { alt: i % 2 !== 0, center: true, w: WA[6] }),
+            cell(a.nom, {
+                alt: !a.muted && i % 2 !== 0,
+                muted: a.muted,
+                w: WA[0],
+            }),
+            cell(a.prenom, {
+                alt: !a.muted && i % 2 !== 0,
+                muted: a.muted,
+                w: WA[1],
+            }),
+            cell(a.fonction, {
+                alt: !a.muted && i % 2 !== 0,
+                muted: a.muted,
+                w: WA[2],
+            }),
+            ...(a.muted
+                ? [
+                      cell("—", { muted: true, center: true, w: WA[3] }),
+                      cell("—", { muted: true, center: true, w: WA[4] }),
+                      cell("—", { muted: true, center: true, w: WA[5] }),
+                      cell("—", { muted: true, center: true, w: WA[6] }),
+                  ]
+                : [
+                      cell(BOX, { alt: i % 2 !== 0, center: true, w: WA[3] }),
+                      cell(BOX, { alt: i % 2 !== 0, center: true, w: WA[4] }),
+                      cell(BOX, { alt: i % 2 !== 0, center: true, w: WA[5] }),
+                      cell(BOX, { alt: i % 2 !== 0, center: true, w: WA[6] }),
+                  ]),
         ])
     );
 
@@ -670,6 +819,7 @@ function buildZoneDocument(
     teacherByClass,
     classesInZone
 ) {
+    const staffById = Object.fromEntries(config.staff.map((s) => [s.id, s]));
     const allChildren = [
         makeAdultsChildren(
             zone,
@@ -684,7 +834,9 @@ function buildZoneDocument(
                 teacherByClass[cl] || "",
                 getClassStaff(config, cl),
                 zone,
-                config.schoolName
+                config.schoolName,
+                config.classOverrides?.[cl] || null,
+                staffById
             )
         ),
     ];

@@ -13,7 +13,7 @@ export default function App() {
     const [config, setConfig] = useState(null);
 
     const csvData = useCSVData(csvResult);
-    const { classes, totalStudents } = csvData;
+    const { classes, totalStudents, teacherByClass } = csvData;
 
     const handleParsed = (result) => {
         setCsvResult(result);
@@ -57,6 +57,7 @@ export default function App() {
                 {step === 3 && csvResult && (
                     <ConfigForm
                         classes={classes}
+                        teacherByClass={teacherByClass}
                         onSubmit={handleConfig}
                         onBack={() => setStep(2)}
                         initialConfig={config}

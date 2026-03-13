@@ -44,6 +44,7 @@ const DEFAULTS = {
     zones: [{ id: "z1", name: "", responsibleNom: "", responsiblePrenom: "" }],
     classZoneMap: {},
     crisisCell: { nom: "", prenom: "", fonction: "Directeur/trice" },
+    classOverrides: {}, // ← nouveau
     staff: [],
     blankIntervenantRows: 5,
 };
@@ -51,6 +52,7 @@ const DEFAULTS = {
 // ── Composant principal ────────────────────────────────────────────
 export default function ConfigForm({
     classes,
+    teacherByClass = {},
     onSubmit,
     onBack,
     initialConfig,
@@ -65,7 +67,6 @@ export default function ConfigForm({
     });
     const [errors, setErrors] = useState({});
     const [showFormatOptions, setShowFormatOptions] = useState(false);
-    // IDs des cartes staff en mode édition (les nouvelles s'ouvrent automatiquement)
     const [editingStaffIds, setEditingStaffIds] = useState(new Set());
 
     // ── Setters ────────────────────────────────────────────────────
@@ -180,7 +181,6 @@ export default function ConfigForm({
         const errs = validate();
         if (Object.keys(errs).length > 0) {
             setErrors(errs);
-            // Rouvrir les cartes en erreur
             const staffInError = config.staff
                 .filter(
                     (s) =>
@@ -201,6 +201,9 @@ export default function ConfigForm({
     const multiZone = config.zones.length > 1;
     const showClassMap = config.configType === "B" && multiZone;
     const docCount = (config.configType === "A" ? 1 : config.zones.length) + 1;
+    const overrideCount = Object.values(config.classOverrides || {}).filter(
+        (o) => o?.teacherUnavailable
+    ).length;
 
     const getRattachementLabel = (rattachement) => {
         if (!rattachement) return "⚠️ Non rattaché";
@@ -221,13 +224,17 @@ export default function ConfigForm({
         })),
     ];
 
-    // ── Résumé barre sticky ────────────────────────────────────────
     const summaryText = [
         config.schoolName || "École non définie",
         `Option ${config.configType}`,
         `${config.zones.length} zone${config.zones.length > 1 ? "s" : ""}`,
+        overrideCount > 0
+            ? `${overrideCount} remplacement${overrideCount > 1 ? "s" : ""}`
+            : null,
         `→ ${docCount} doc${docCount > 1 ? "s" : ""}`,
-    ].join("  ·  ");
+    ]
+        .filter(Boolean)
+        .join("  ·  ");
 
     return (
         <form onSubmit={handleSubmit} noValidate className="space-y-8 pb-28">
@@ -247,6 +254,12 @@ export default function ConfigForm({
                         n'ont qu'une seule zone.
                     </p>
                     <p>
+                        <strong>🔄 Encadrement PPMS</strong> — Si un enseignant
+                        ne sera pas avec sa classe (directrice à la cellule de
+                        crise, responsable de zone…), désigner son remplaçant
+                        ici.
+                    </p>
+                    <p>
                         <strong>👥 Autres adultes</strong> — AESH, ATSEM,
                         entretien, service civique… Les enseignants sont déjà
                         extraits du CSV.
@@ -264,7 +277,7 @@ export default function ConfigForm({
                 </p>
             </div>
 
-            {/* ── 1. Votre école ─────────────────────────────────── */}
+            {/* ── 1. Votre école ──────────────────────────────────────── */}
             <Section title="Votre école">
                 <Field label="Nom de l'école" error={errors.schoolName}>
                     <input
@@ -276,7 +289,6 @@ export default function ConfigForm({
                     />
                 </Field>
 
-                {/* Cellule de crise — champ dédié, visuel distinctif non alarmant */}
                 <div className="border-2 border-blue-800 rounded-xl p-4 space-y-3 bg-blue-50">
                     <div className="flex items-center justify-between">
                         <p className="text-sm font-bold text-blue-900">
@@ -336,10 +348,9 @@ export default function ConfigForm({
                 </div>
             </Section>
 
-            {/* ── 2. Format des fiches ───────────────────────────── */}
+            {/* ── 2. Format des fiches ────────────────────────────────── */}
             <Section title="Format des fiches">
                 {!showFormatOptions ? (
-                    /* Vue synthétique — format auto-déterminé */
                     <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 gap-3">
                         <div className="flex items-center gap-3 min-w-0">
                             <span className="text-xl shrink-0">
@@ -367,7 +378,6 @@ export default function ConfigForm({
                         </button>
                     </div>
                 ) : (
-                    /* Vue détaillée — choix explicite */
                     <div className="space-y-3">
                         {classes.length > 3 && (
                             <p className="text-sm bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 text-amber-800">
@@ -401,11 +411,7 @@ export default function ConfigForm({
                                         setShowFormatOptions(false);
                                     }}
                                     className={`text-left rounded-xl border-2 p-4 transition-all outline-none focus-visible:ring-2 focus-visible:ring-blue-500
-                    ${
-                        config.configType === opt.id
-                            ? "border-blue-700 bg-blue-50"
-                            : "border-gray-200 bg-white hover:border-blue-300"
-                    }`}
+                    ${config.configType === opt.id ? "border-blue-700 bg-blue-50" : "border-gray-200 bg-white hover:border-blue-300"}`}
                                 >
                                     <div className="flex items-center gap-2 mb-1.5">
                                         <span
@@ -436,7 +442,7 @@ export default function ConfigForm({
                 )}
             </Section>
 
-            {/* ── 3. Zones de mise en sûreté ─────────────────────── */}
+            {/* ── 3. Zones de mise en sûreté ──────────────────────────── */}
             <Section title="Zones de mise en sûreté">
                 <div className="space-y-4">
                     {config.zones.map((zone, idx) => (
@@ -444,7 +450,6 @@ export default function ConfigForm({
                             key={zone.id}
                             className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-4"
                         >
-                            {/* En-tête zone */}
                             <div className="flex items-center justify-between">
                                 <span className="text-sm font-semibold text-gray-700">
                                     Zone {idx + 1}
@@ -460,7 +465,6 @@ export default function ConfigForm({
                                 )}
                             </div>
 
-                            {/* Lieu — pleine largeur */}
                             <Field
                                 label="Lieu de confinement"
                                 error={errors[`zone_${zone.id}_name`]}
@@ -482,7 +486,6 @@ export default function ConfigForm({
                                 />
                             </Field>
 
-                            {/* Responsable — sous-groupe subordonné */}
                             <div className="bg-white border border-gray-200 rounded-lg p-3 space-y-3">
                                 <div>
                                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
@@ -541,7 +544,6 @@ export default function ConfigForm({
                         </div>
                     ))}
                 </div>
-
                 <div className="space-y-1">
                     <button
                         type="button"
@@ -558,7 +560,7 @@ export default function ConfigForm({
                 </div>
             </Section>
 
-            {/* ── 4. Affectation classes → zones (si multi-zones) ── */}
+            {/* ── 4. Affectation classes → zones (si multi-zones) ─────── */}
             {showClassMap && (
                 <Section title="Affectation des classes aux zones">
                     <p className="text-sm text-gray-500 mb-3">
@@ -596,7 +598,17 @@ export default function ConfigForm({
                 </Section>
             )}
 
-            {/* ── 5. Autres adultes ──────────────────────────────── */}
+            {/* ── 4bis. Encadrement PPMS par classe ───────────────────── */}
+            <Section title="Encadrement PPMS par classe">
+                <EncadrementSection
+                    classes={classes}
+                    teacherByClass={teacherByClass}
+                    config={config}
+                    setConfig={setConfig}
+                />
+            </Section>
+
+            {/* ── 5. Autres adultes ───────────────────────────────────── */}
             <Section title="Autres adultes">
                 <p className="text-sm text-gray-500">
                     Saisir les adultes présents dans l'école hors enseignants —
@@ -605,7 +617,6 @@ export default function ConfigForm({
                     de sa zone ou de sa classe.
                 </p>
 
-                {/* Cartes staff */}
                 {config.staff.length > 0 && (
                     <div className="space-y-2 mt-1">
                         {config.staff.map((s) =>
@@ -649,7 +660,6 @@ export default function ConfigForm({
                     personnel
                 </button>
 
-                {/* Lignes vierges */}
                 <div className="flex items-center gap-3 mt-3 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
                     <label className="text-sm text-gray-600 flex-1">
                         Lignes vierges pour intervenants / personnels variables
@@ -671,7 +681,7 @@ export default function ConfigForm({
                 </div>
             </Section>
 
-            {/* ── Barre sticky — résumé + navigation ────────────── */}
+            {/* ── Barre sticky ────────────────────────────────────────── */}
             <div className="sticky bottom-0 z-10 -mx-6 px-6 py-4 bg-white/95 backdrop-blur-sm border-t border-gray-200 shadow-[0_-2px_8px_rgba(0,0,0,0.08)]">
                 <p className="text-xs text-gray-400 mb-2 truncate">
                     {summaryText}
@@ -696,6 +706,321 @@ export default function ConfigForm({
     );
 }
 
+// ── Section Encadrement PPMS ───────────────────────────────────────
+function EncadrementSection({ classes, teacherByClass, config, setConfig }) {
+    const [open, setOpen] = useState(false);
+    const overrides = config.classOverrides || {};
+    const activeCount = Object.values(overrides).filter(
+        (o) => o?.teacherUnavailable
+    ).length;
+
+    const toggleClass = (cl, enabled) =>
+        setConfig((p) => ({
+            ...p,
+            classOverrides: {
+                ...p.classOverrides,
+                [cl]: enabled
+                    ? {
+                          teacherUnavailable: true,
+                          substituteSource: "staff",
+                          substituteStaffId: "",
+                          substituteNom: "",
+                          substitutePrenom: "",
+                          substituteFonction: "",
+                      }
+                    : undefined,
+            },
+        }));
+
+    const updateOverride = (cl, updates) =>
+        setConfig((p) => ({
+            ...p,
+            classOverrides: {
+                ...p.classOverrides,
+                [cl]: { ...p.classOverrides[cl], ...updates },
+            },
+        }));
+
+    const staffOptions = config.staff.map((s) => ({
+        value: s.id,
+        label: [fullName(s.nom, s.prenom), s.fonction]
+            .filter(Boolean)
+            .join(" — "),
+    }));
+
+    return (
+        <div className="border border-gray-200 rounded-xl overflow-hidden">
+            {/* En-tête accordéon */}
+            <button
+                type="button"
+                onClick={() => setOpen((o) => !o)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left gap-3"
+                aria-expanded={open}
+            >
+                <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-semibold text-gray-700">
+                        Remplacements d'encadrement
+                    </span>
+                    {activeCount > 0 ? (
+                        <span className="bg-amber-100 text-amber-800 text-xs font-semibold px-2 py-0.5 rounded-full">
+                            {activeCount} remplacement
+                            {activeCount > 1 ? "s" : ""}
+                        </span>
+                    ) : (
+                        <span className="text-xs text-gray-400">
+                            Optionnel — aucun remplacement
+                        </span>
+                    )}
+                </div>
+                <svg
+                    className={`w-4 h-4 text-gray-400 transition-transform shrink-0 ${open ? "rotate-180" : ""}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                >
+                    <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 9l-7 7-7-7"
+                    />
+                </svg>
+            </button>
+
+            {open && (
+                <div className="divide-y divide-gray-100">
+                    {/* Explication */}
+                    <p className="px-4 py-3 text-xs text-gray-500 leading-relaxed bg-white">
+                        Cocher si un enseignant ne sera pas avec son groupe
+                        pendant le PPMS : directeur/trice à la cellule de crise,
+                        responsable de zone, toute autre mission. Son nom
+                        restera visible sur la fiche avec mention de sa mission
+                        — il faut alors désigner l'adulte qui encadrera
+                        réellement la classe.
+                    </p>
+
+                    {/* Une ligne par classe */}
+                    {classes.map((cl) => {
+                        const teacher = teacherByClass[cl];
+                        const override = overrides[cl];
+                        const isOverridden = !!override?.teacherUnavailable;
+
+                        return (
+                            <div
+                                key={cl}
+                                className="px-4 py-3 space-y-3 bg-white"
+                            >
+                                {/* Toggle */}
+                                <label className="flex items-start gap-3 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={isOverridden}
+                                        onChange={(e) =>
+                                            toggleClass(cl, e.target.checked)
+                                        }
+                                        className="mt-0.5 w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                                    />
+                                    <div>
+                                        <span className="text-sm font-semibold text-gray-800">
+                                            {cl}
+                                        </span>
+                                        {teacher ? (
+                                            <span className="text-sm text-gray-500">
+                                                {" "}
+                                                — {teacher} absent(e) du groupe
+                                            </span>
+                                        ) : (
+                                            <span className="text-sm text-gray-400 italic">
+                                                {" "}
+                                                — enseignant(e) non détecté(e)
+                                                dans le CSV
+                                            </span>
+                                        )}
+                                    </div>
+                                </label>
+
+                                {/* Formulaire de remplacement */}
+                                {isOverridden && (
+                                    <div className="ml-7 bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-3">
+                                        <p className="text-xs font-semibold text-amber-900">
+                                            Adulte qui encadrera cette classe
+                                            pendant le PPMS :
+                                        </p>
+
+                                        {/* Source toggle */}
+                                        <div className="flex gap-2">
+                                            {[
+                                                {
+                                                    value: "staff",
+                                                    label: "Choisir dans la liste",
+                                                },
+                                                {
+                                                    value: "manual",
+                                                    label: "Saisir manuellement",
+                                                },
+                                            ].map((opt) => (
+                                                <button
+                                                    key={opt.value}
+                                                    type="button"
+                                                    onClick={() =>
+                                                        updateOverride(cl, {
+                                                            substituteSource:
+                                                                opt.value,
+                                                        })
+                                                    }
+                                                    className={`text-xs px-3 py-1.5 rounded-lg border transition-colors
+                            ${
+                                override.substituteSource === opt.value
+                                    ? "bg-amber-600 text-white border-amber-600"
+                                    : "bg-white text-amber-700 border-amber-300 hover:border-amber-500"
+                            }`}
+                                                >
+                                                    {opt.label}
+                                                </button>
+                                            ))}
+                                        </div>
+
+                                        {/* Depuis la liste staff */}
+                                        {override.substituteSource ===
+                                            "staff" &&
+                                            (staffOptions.length > 0 ? (
+                                                <select
+                                                    value={
+                                                        override.substituteStaffId ||
+                                                        ""
+                                                    }
+                                                    onChange={(e) =>
+                                                        updateOverride(cl, {
+                                                            substituteStaffId:
+                                                                e.target.value,
+                                                        })
+                                                    }
+                                                    className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-400"
+                                                >
+                                                    <option value="">
+                                                        — Sélectionner un adulte
+                                                        —
+                                                    </option>
+                                                    {staffOptions.map((o) => (
+                                                        <option
+                                                            key={o.value}
+                                                            value={o.value}
+                                                        >
+                                                            {o.label}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            ) : (
+                                                <p className="text-xs text-amber-700 bg-amber-100 rounded-lg px-3 py-2">
+                                                    Aucun adulte dans la section
+                                                    "Autres adultes". Renseigner
+                                                    d'abord la section
+                                                    ci-dessous, ou utiliser la
+                                                    saisie manuelle.
+                                                </p>
+                                            ))}
+
+                                        {/* Saisie manuelle */}
+                                        {override.substituteSource ===
+                                            "manual" && (
+                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                                {[
+                                                    {
+                                                        key: "substituteNom",
+                                                        label: "NOM",
+                                                        placeholder: "GARCIA",
+                                                        transform: toNom,
+                                                    },
+                                                    {
+                                                        key: "substitutePrenom",
+                                                        label: "Prénom",
+                                                        placeholder: "Ana",
+                                                        transform: toPrenom,
+                                                    },
+                                                ].map(
+                                                    ({
+                                                        key,
+                                                        label,
+                                                        placeholder,
+                                                        transform,
+                                                    }) => (
+                                                        <div key={key}>
+                                                            <label className="block text-xs font-medium text-amber-800 mb-1">
+                                                                {label}
+                                                            </label>
+                                                            <input
+                                                                type="text"
+                                                                placeholder={
+                                                                    placeholder
+                                                                }
+                                                                value={
+                                                                    override[
+                                                                        key
+                                                                    ] || ""
+                                                                }
+                                                                onChange={(e) =>
+                                                                    updateOverride(
+                                                                        cl,
+                                                                        {
+                                                                            [key]: transform(
+                                                                                e
+                                                                                    .target
+                                                                                    .value
+                                                                            ),
+                                                                        }
+                                                                    )
+                                                                }
+                                                                className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-400"
+                                                            />
+                                                        </div>
+                                                    )
+                                                )}
+                                                <div>
+                                                    <label className="block text-xs font-medium text-amber-800 mb-1">
+                                                        Fonction
+                                                    </label>
+                                                    <select
+                                                        value={
+                                                            override.substituteFonction ||
+                                                            ""
+                                                        }
+                                                        onChange={(e) =>
+                                                            updateOverride(cl, {
+                                                                substituteFonction:
+                                                                    e.target
+                                                                        .value,
+                                                            })
+                                                        }
+                                                        className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-400"
+                                                    >
+                                                        <option value="">
+                                                            — Fonction —
+                                                        </option>
+                                                        {FONCTIONS_STAFF.map(
+                                                            (f) => (
+                                                                <option
+                                                                    key={f}
+                                                                    value={f}
+                                                                >
+                                                                    {f}
+                                                                </option>
+                                                            )
+                                                        )}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ── Carte staff — mode édition ─────────────────────────────────────
 function StaffCardEditing({
     staff,
@@ -713,9 +1038,7 @@ function StaffCardEditing({
                         type="text"
                         placeholder="GARCIA"
                         value={staff.nom}
-                        onChange={(e) =>
-                            onUpdate("nom", e.target.value.toUpperCase())
-                        }
+                        onChange={(e) => onUpdate("nom", toNom(e.target.value))}
                         className={cx(errors[`staff_${staff.id}_nom`])}
                     />
                 </Field>
@@ -725,15 +1048,7 @@ function StaffCardEditing({
                         placeholder="Ana"
                         value={staff.prenom}
                         onChange={(e) =>
-                            onUpdate(
-                                "prenom",
-                                e.target.value
-                                    .toLowerCase()
-                                    .replace(
-                                        /(^|\s|-)([a-zà-ÿ])/g,
-                                        (_, sep, c) => sep + c.toUpperCase()
-                                    )
-                            )
+                            onUpdate("prenom", toPrenom(e.target.value))
                         }
                         className={cx()}
                     />
@@ -805,11 +1120,7 @@ function StaffCardDisplay({
     return (
         <div
             className={`flex items-center justify-between rounded-xl px-4 py-3 group transition-colors
-      ${
-          hasError
-              ? "bg-red-50 border border-red-300"
-              : "bg-gray-50 border border-gray-200 hover:border-gray-300"
-      }`}
+      ${hasError ? "bg-red-50 border border-red-300" : "bg-gray-50 border border-gray-200 hover:border-gray-300"}`}
         >
             <div className="flex items-center gap-3 min-w-0">
                 <span className="text-base shrink-0">👤</span>
@@ -849,7 +1160,7 @@ function StaffCardDisplay({
     );
 }
 
-// ── Helpers ────────────────────────────────────────────────────────
+// ── Helpers UI ─────────────────────────────────────────────────────
 function Section({ title, children }) {
     return (
         <div className="space-y-4">
