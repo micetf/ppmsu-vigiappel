@@ -19,6 +19,14 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
     });
     const [errors, setErrors] = useState({});
 
+    // Dans ConfigForm, section zones — label "Responsable de cette zone"
+    // Remplacer le hint statique par un hint contextuel selon configType :
+
+    const zoneResponsableHint =
+        config.configType === "B"
+            ? "Adulte désigné pour centraliser les remontées depuis cette zone vers la cellule de crise. Peut être le/la directeur/trice si aucun autre adulte n'est désigné."
+            : "Adulte responsable de la zone. Son nom figurera en en-tête de la fiche.";
+
     // ── Setters ────────────────────────────────────────────────────
     const setField = (field, value) => {
         setConfig((p) => ({ ...p, [field]: value }));
@@ -97,7 +105,11 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
 
             {/* École */}
             <Section title="École">
-                <Field label="Nom de l'école" error={errors.schoolName}>
+                <Field
+                    label="Nom de l'école"
+                    hint={zoneResponsableHint}
+                    error={errors.schoolName}
+                >
                     <input
                         type="text"
                         placeholder="École élémentaire Jules Ferry"

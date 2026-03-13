@@ -25,8 +25,8 @@ const ALL_BORDERS = {
     left: BORDER,
     right: BORDER,
 };
-const SHADE_HEADER = { type: ShadingType.SOLID, fill: "1E3A5F" };
-const SHADE_ALT = { type: ShadingType.SOLID, fill: "EEF2F7" };
+const SHADE_HEADER = { type: ShadingType.SOLID, fill: "1E3A5F", color: "auto" };
+const SHADE_ALT = { type: ShadingType.SOLID, fill: "EEF2F7", color: "auto" };
 const PAGE_MARGIN = { top: 1134, bottom: 1134, left: 1134, right: 1134 }; // 2 cm
 const TABLE_W = 9400; // DXA (~16,6 cm) pour une page A4 avec marges 2 cm
 
