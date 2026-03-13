@@ -1,6 +1,5 @@
-// src/App.jsx — version finale complète
-
 import { useState } from "react";
+import Navbar from "./components/Navbar"; // ← nouveau
 import StepIndicator from "./components/StepIndicator";
 import FileUpload from "./components/FileUpload";
 import DataPreview from "./components/DataPreview";
@@ -30,7 +29,6 @@ export default function App() {
         setStep(4);
     };
 
-    // Navigation retour vers étape déjà validée
     function handleGoTo(n) {
         if (n === 1) handleReset();
         else setStep(n);
@@ -38,7 +36,11 @@ export default function App() {
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
-            <header className="bg-blue-800 text-white py-4 px-6 shadow-md">
+            {/* Navbar micetf.fr — fixe, z-50 */}
+            <Navbar />
+
+            {/* Header app — pt-14 pour passer sous la navbar fixe */}
+            <header className="bg-blue-800 text-white py-4 px-6 shadow-md mt-14">
                 <div className="max-w-4xl mx-auto flex items-center justify-between">
                     <div className="flex items-baseline gap-3">
                         <h1 className="text-xl font-bold tracking-tight">
@@ -59,6 +61,7 @@ export default function App() {
                 </div>
             </header>
 
+            {/* Contenu principal */}
             <main className="flex-1 max-w-4xl mx-auto w-full p-6">
                 <StepIndicator current={step} onGoTo={handleGoTo} />
 

@@ -1,1 +1,9 @@
 @import "tailwindcss";
+
+@layer utilities {
+    .no-print {
+        @media print {
+            display: none !important;
+        }
+    }
+}
