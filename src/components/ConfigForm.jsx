@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { toNom, toPrenom } from "../utils/formatName";
+import { toNom, toPrenom, fullName } from "../utils/formatName";
 import StepHelp from "./StepHelp";
 
+// ── Factories ──────────────────────────────────────────────────────
 let _zoneId = 1;
 const newZone = () => ({
     id: `z${++_zoneId}`,
@@ -19,6 +20,7 @@ const newStaff = () => ({
     rattachement: "",
 });
 
+// ── Constantes ─────────────────────────────────────────────────────
 const FONCTIONS_CRISE = [
     "Directeur/trice",
     "Directeur/trice adjoint(e)",
@@ -41,11 +43,12 @@ const DEFAULTS = {
     configType: "A",
     zones: [{ id: "z1", name: "", responsibleNom: "", responsiblePrenom: "" }],
     classZoneMap: {},
-    crisisCell: { nom: "", prenom: "", fonction: "Directeur/trice" }, // ← champ dédié
+    crisisCell: { nom: "", prenom: "", fonction: "Directeur/trice" },
     staff: [],
     blankIntervenantRows: 5,
 };
 
+// ── Composant principal ────────────────────────────────────────────
 export default function ConfigForm({
     classes,
     onSubmit,
@@ -61,8 +64,11 @@ export default function ConfigForm({
         };
     });
     const [errors, setErrors] = useState({});
+    const [showFormatOptions, setShowFormatOptions] = useState(false);
+    // IDs des cartes staff en mode édition (les nouvelles s'ouvrent automatiquement)
+    const [editingStaffIds, setEditingStaffIds] = useState(new Set());
 
-    // ── Setters génériques ─────────────────────────────────────────
+    // ── Setters ────────────────────────────────────────────────────
     const setField = (field, value) => {
         setConfig((p) => ({ ...p, [field]: value }));
         setErrors((p) => ({ ...p, [field]: undefined }));
@@ -115,8 +121,11 @@ export default function ConfigForm({
         }));
 
     // ── Staff ──────────────────────────────────────────────────────
-    const addStaff = () =>
-        setConfig((p) => ({ ...p, staff: [...p.staff, newStaff()] }));
+    const addStaff = () => {
+        const s = newStaff();
+        setConfig((p) => ({ ...p, staff: [...p.staff, s] }));
+        setEditingStaffIds((prev) => new Set([...prev, s.id]));
+    };
 
     const updateStaff = (id, field, value) => {
         setConfig((p) => ({
@@ -128,8 +137,24 @@ export default function ConfigForm({
         setErrors((p) => ({ ...p, [`staff_${id}_${field}`]: undefined }));
     };
 
-    const removeStaff = (id) =>
+    const removeStaff = (id) => {
         setConfig((p) => ({ ...p, staff: p.staff.filter((s) => s.id !== id) }));
+        setEditingStaffIds((prev) => {
+            const n = new Set(prev);
+            n.delete(id);
+            return n;
+        });
+    };
+
+    const validateStaff = (id) =>
+        setEditingStaffIds((prev) => {
+            const n = new Set(prev);
+            n.delete(id);
+            return n;
+        });
+
+    const editStaff = (id) =>
+        setEditingStaffIds((prev) => new Set([...prev, id]));
 
     // ── Validation ─────────────────────────────────────────────────
     const validate = () => {
@@ -155,15 +180,36 @@ export default function ConfigForm({
         const errs = validate();
         if (Object.keys(errs).length > 0) {
             setErrors(errs);
+            // Rouvrir les cartes en erreur
+            const staffInError = config.staff
+                .filter(
+                    (s) =>
+                        errs[`staff_${s.id}_nom`] ||
+                        errs[`staff_${s.id}_rattachement`]
+                )
+                .map((s) => s.id);
+            if (staffInError.length)
+                setEditingStaffIds(
+                    (prev) => new Set([...prev, ...staffInError])
+                );
             return;
         }
         onSubmit(config);
     };
 
+    // ── Dérivés ────────────────────────────────────────────────────
     const multiZone = config.zones.length > 1;
     const showClassMap = config.configType === "B" && multiZone;
+    const docCount = (config.configType === "A" ? 1 : config.zones.length) + 1;
 
-    // Options rattachement staff — "cellule" retirée, gérée séparément
+    const getRattachementLabel = (rattachement) => {
+        if (!rattachement) return "⚠️ Non rattaché";
+        if (rattachement.startsWith("class_"))
+            return `Classe ${rattachement.replace("class_", "")}`;
+        const zone = config.zones.find((z) => z.id === rattachement);
+        return zone ? `Zone — ${zone.name || "sans nom"}` : "Zone inconnue";
+    };
+
     const rattachementOptions = [
         ...config.zones.map((z, i) => ({
             value: z.id,
@@ -175,34 +221,35 @@ export default function ConfigForm({
         })),
     ];
 
+    // ── Résumé barre sticky ────────────────────────────────────────
+    const summaryText = [
+        config.schoolName || "École non définie",
+        `Option ${config.configType}`,
+        `${config.zones.length} zone${config.zones.length > 1 ? "s" : ""}`,
+        `→ ${docCount} doc${docCount > 1 ? "s" : ""}`,
+    ].join("  ·  ");
+
     return (
-        <form onSubmit={handleSubmit} noValidate className="space-y-8">
+        <form onSubmit={handleSubmit} noValidate className="space-y-8 pb-28">
             <StepHelp
                 stepKey="step3"
                 title="Comment remplir cette configuration ?"
             >
-                <div className="pt-3 space-y-2">
+                <div className="pt-3 space-y-2 text-sm">
                     <p>
-                        <strong>🏫 Nom de l'école</strong> — tel qu'il
-                        apparaîtra en en-tête de chaque fiche.
+                        <strong>🏫 Votre école</strong> — Nom tel qu'il
+                        apparaîtra en en-tête, et identité du/de la
+                        directeur/trice (responsable de la cellule de crise).
                     </p>
                     <p>
-                        <strong>🔴 Cellule de crise</strong> — en général, vous
-                        (le/la directeur/trice). Cette personne coordonne les
-                        appels aux secours et ne gère pas de classe pendant le
-                        PPMS.
+                        <strong>📍 Zones</strong> — Lieu(x) de confinement et
+                        adulte responsable de chaque zone. La plupart des écoles
+                        n'ont qu'une seule zone.
                     </p>
                     <p>
-                        <strong>📍 Zone de mise en sûreté</strong> — le lieu de
-                        confinement (gymnase, salle polyvalente…). Si votre
-                        école a plusieurs bâtiments, vous pouvez ajouter
-                        plusieurs zones.
-                    </p>
-                    <p>
-                        <strong>👥 Personnels</strong> — saisir les adultes
-                        présents dans l'école autres que les enseignants : AESH,
-                        ATSEM, personnel entretien, service civique… Ils seront
-                        intégrés aux fiches.
+                        <strong>👥 Autres adultes</strong> — AESH, ATSEM,
+                        entretien, service civique… Les enseignants sont déjà
+                        extraits du CSV.
                     </p>
                 </div>
             </StepHelp>
@@ -212,13 +259,13 @@ export default function ConfigForm({
                     Étape 3 – Configuration des fiches
                 </h2>
                 <p className="text-sm text-gray-500">
-                    Ces informations figureront dans l'en-tête — modèle Eduscol
-                    PPMS 2024.
+                    Ces informations figureront dans l'en-tête des documents —
+                    modèle Eduscol PPMS 2024.
                 </p>
             </div>
 
-            {/* École */}
-            <Section title="École">
+            {/* ── 1. Votre école ─────────────────────────────────── */}
+            <Section title="Votre école">
                 <Field label="Nom de l'école" error={errors.schoolName}>
                     <input
                         type="text"
@@ -228,163 +275,290 @@ export default function ConfigForm({
                         className={cx(errors.schoolName)}
                     />
                 </Field>
-            </Section>
 
-            {/* Format */}
-            <Section title="Format des fiches générées">
-                {classes.length > 3 && (
-                    <p className="text-sm bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 text-amber-800 mb-3">
-                        💡 <strong>{classes.length} classes détectées</strong> —
-                        l'option B est recommandée.
+                {/* Cellule de crise — champ dédié, visuel distinctif non alarmant */}
+                <div className="border-2 border-blue-800 rounded-xl p-4 space-y-3 bg-blue-50">
+                    <div className="flex items-center justify-between">
+                        <p className="text-sm font-bold text-blue-900">
+                            🔒 Responsable de la cellule de crise
+                        </p>
+                        <span className="text-xs font-semibold text-blue-800 bg-blue-200 px-2 py-0.5 rounded-full">
+                            Obligatoire
+                        </span>
+                    </div>
+                    <p className="text-xs text-blue-700 leading-relaxed">
+                        Pilote la cellule de crise : communications avec les
+                        secours (112, IEN, mairie), centralise les bilans de
+                        toutes les zones. Ne gère pas de classe pendant le PPMS.
                     </p>
-                )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {[
-                        {
-                            id: "A",
-                            icon: "📄",
-                            label: "Option A – Fiche unique",
-                            desc: "Tous les élèves sur un même document. Adapté pour les petites écoles (≤ 3 classes).",
-                        },
-                        {
-                            id: "B",
-                            icon: "📋",
-                            label: "Option B – Fiche par classe",
-                            desc: "1 fiche par enseignant + 1 fiche adultes par zone + 1 synthèse cellule de crise.",
-                        },
-                    ].map((opt) => (
-                        <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => setField("configType", opt.id)}
-                            className={`text-left rounded-xl border-2 p-4 transition-all outline-none focus-visible:ring-2 focus-visible:ring-blue-500
-                ${
-                    config.configType === opt.id
-                        ? "border-blue-700 bg-blue-50"
-                        : "border-gray-200 bg-white hover:border-blue-300"
-                }`}
-                        >
-                            <div className="flex items-center gap-2 mb-1.5">
-                                <span
-                                    className={`w-4 h-4 rounded-full border-2 shrink-0 ${
-                                        config.configType === opt.id
-                                            ? "border-blue-700 bg-blue-700"
-                                            : "border-gray-300"
-                                    }`}
-                                />
-                                <span className="text-base">{opt.icon}</span>
-                                <span className="font-semibold text-sm text-gray-800">
-                                    {opt.label}
-                                </span>
-                            </div>
-                            <p className="text-xs text-gray-500 pl-6">
-                                {opt.desc}
-                            </p>
-                        </button>
-                    ))}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <Field label="NOM" error={errors.crisisCell_nom}>
+                            <input
+                                type="text"
+                                placeholder="DUPONT"
+                                value={config.crisisCell.nom}
+                                onChange={(e) =>
+                                    setCrisisCell("nom", toNom(e.target.value))
+                                }
+                                className={cx(errors.crisisCell_nom)}
+                            />
+                        </Field>
+                        <Field label="Prénom" optional>
+                            <input
+                                type="text"
+                                placeholder="Marie"
+                                value={config.crisisCell.prenom}
+                                onChange={(e) =>
+                                    setCrisisCell(
+                                        "prenom",
+                                        toPrenom(e.target.value)
+                                    )
+                                }
+                                className={cx()}
+                            />
+                        </Field>
+                        <Field label="Fonction" optional>
+                            <select
+                                value={config.crisisCell.fonction}
+                                onChange={(e) =>
+                                    setCrisisCell("fonction", e.target.value)
+                                }
+                                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                                {FONCTIONS_CRISE.map((f) => (
+                                    <option key={f} value={f}>
+                                        {f}
+                                    </option>
+                                ))}
+                            </select>
+                        </Field>
+                    </div>
                 </div>
             </Section>
 
-            {/* Zones */}
-            <Section title={`Zone${multiZone ? "s" : ""} de mise en sûreté`}>
-                <div className="space-y-3">
+            {/* ── 2. Format des fiches ───────────────────────────── */}
+            <Section title="Format des fiches">
+                {!showFormatOptions ? (
+                    /* Vue synthétique — format auto-déterminé */
+                    <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <span className="text-xl shrink-0">
+                                {config.configType === "B" ? "📋" : "📄"}
+                            </span>
+                            <div className="min-w-0">
+                                <p className="text-sm font-semibold text-gray-800">
+                                    {config.configType === "B"
+                                        ? "Option B — Fiche par classe"
+                                        : "Option A — Fiche unique"}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                    {config.configType === "B"
+                                        ? `${classes.length} classes · 1 fiche par enseignant + synthèse cellule de crise`
+                                        : `${classes.length} classe${classes.length > 1 ? "s" : ""} · tous les élèves sur un seul document`}
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowFormatOptions(true)}
+                            className="text-xs text-blue-700 hover:text-blue-900 hover:underline shrink-0 transition-colors"
+                        >
+                            Modifier ▾
+                        </button>
+                    </div>
+                ) : (
+                    /* Vue détaillée — choix explicite */
+                    <div className="space-y-3">
+                        {classes.length > 3 && (
+                            <p className="text-sm bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 text-amber-800">
+                                💡{" "}
+                                <strong>
+                                    {classes.length} classes détectées
+                                </strong>{" "}
+                                — l'option B est recommandée.
+                            </p>
+                        )}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {[
+                                {
+                                    id: "A",
+                                    icon: "📄",
+                                    label: "Option A — Fiche unique",
+                                    desc: "Tous les élèves sur un même document. Adapté pour les petites écoles (≤ 3 classes).",
+                                },
+                                {
+                                    id: "B",
+                                    icon: "📋",
+                                    label: "Option B — Fiche par classe",
+                                    desc: "1 fiche par enseignant + 1 fiche adultes par zone + 1 synthèse cellule de crise.",
+                                },
+                            ].map((opt) => (
+                                <button
+                                    key={opt.id}
+                                    type="button"
+                                    onClick={() => {
+                                        setField("configType", opt.id);
+                                        setShowFormatOptions(false);
+                                    }}
+                                    className={`text-left rounded-xl border-2 p-4 transition-all outline-none focus-visible:ring-2 focus-visible:ring-blue-500
+                    ${
+                        config.configType === opt.id
+                            ? "border-blue-700 bg-blue-50"
+                            : "border-gray-200 bg-white hover:border-blue-300"
+                    }`}
+                                >
+                                    <div className="flex items-center gap-2 mb-1.5">
+                                        <span
+                                            className={`w-4 h-4 rounded-full border-2 shrink-0
+                      ${config.configType === opt.id ? "border-blue-700 bg-blue-700" : "border-gray-300"}`}
+                                        />
+                                        <span className="text-base">
+                                            {opt.icon}
+                                        </span>
+                                        <span className="font-semibold text-sm text-gray-800">
+                                            {opt.label}
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-gray-500 pl-6">
+                                        {opt.desc}
+                                    </p>
+                                </button>
+                            ))}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowFormatOptions(false)}
+                            className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                            ✕ Réduire
+                        </button>
+                    </div>
+                )}
+            </Section>
+
+            {/* ── 3. Zones de mise en sûreté ─────────────────────── */}
+            <Section title="Zones de mise en sûreté">
+                <div className="space-y-4">
                     {config.zones.map((zone, idx) => (
                         <div
                             key={zone.id}
-                            className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3"
+                            className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-4"
                         >
+                            {/* En-tête zone */}
                             <div className="flex items-center justify-between">
-                                <span className="text-sm font-semibold text-gray-600">
-                                    {multiZone
-                                        ? `Zone ${idx + 1}`
-                                        : "Zone de confinement"}
+                                <span className="text-sm font-semibold text-gray-700">
+                                    Zone {idx + 1}
                                 </span>
-                                {multiZone && (
+                                {config.zones.length > 1 && (
                                     <button
                                         type="button"
                                         onClick={() => removeZone(zone.id)}
                                         className="text-xs text-red-500 hover:text-red-700 transition-colors"
                                     >
-                                        Supprimer
+                                        Supprimer cette zone
                                     </button>
                                 )}
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                <Field
-                                    label="Lieu"
-                                    error={errors[`zone_${zone.id}_name`]}
-                                >
-                                    <input
-                                        placeholder="Gymnase, salle polyvalente…"
-                                        value={zone.name}
-                                        onChange={(e) =>
-                                            updateZone(
-                                                zone.id,
-                                                "name",
-                                                e.target.value
-                                            )
-                                        }
-                                        className={cx(
-                                            errors[`zone_${zone.id}_name`]
-                                        )}
-                                    />
-                                </Field>
-                                <Field
-                                    label="Responsable — Nom"
-                                    error={
-                                        errors[`zone_${zone.id}_responsibleNom`]
+
+                            {/* Lieu — pleine largeur */}
+                            <Field
+                                label="Lieu de confinement"
+                                error={errors[`zone_${zone.id}_name`]}
+                            >
+                                <input
+                                    type="text"
+                                    placeholder="Gymnase, salle polyvalente, couloir condamnable…"
+                                    value={zone.name}
+                                    onChange={(e) =>
+                                        updateZone(
+                                            zone.id,
+                                            "name",
+                                            e.target.value
+                                        )
                                     }
-                                >
-                                    <input
-                                        placeholder="MARTIN"
-                                        value={zone.responsibleNom}
-                                        onChange={(e) =>
-                                            updateZone(
-                                                zone.id,
-                                                "responsibleNom",
-                                                toNom(e.target.value)
-                                            )
-                                        }
-                                        className={cx(
+                                    className={cx(
+                                        errors[`zone_${zone.id}_name`]
+                                    )}
+                                />
+                            </Field>
+
+                            {/* Responsable — sous-groupe subordonné */}
+                            <div className="bg-white border border-gray-200 rounded-lg p-3 space-y-3">
+                                <div>
+                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                        Responsable de zone
+                                    </p>
+                                    <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">
+                                        {multiZone
+                                            ? "Centralise les remontées de cette zone et les transmet à la cellule de crise. Doit être différent du directeur/de la directrice."
+                                            : "Centralise les fiches de recensement et les remonte à la cellule de crise."}
+                                    </p>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <Field
+                                        label="NOM"
+                                        error={
                                             errors[
                                                 `zone_${zone.id}_responsibleNom`
                                             ]
-                                        )}
-                                    />
-                                </Field>
-                                <Field
-                                    label="Responsable — Prénom"
-                                    hint="Pas de champ *"
-                                    error={undefined}
-                                >
-                                    <input
-                                        placeholder="Paul"
-                                        value={zone.responsiblePrenom}
-                                        onChange={(e) =>
-                                            updateZone(
-                                                zone.id,
-                                                "responsiblePrenom",
-                                                toPrenom(e.target.value)
-                                            )
                                         }
-                                        className={cx()}
-                                    />
-                                </Field>
+                                    >
+                                        <input
+                                            type="text"
+                                            placeholder="MARTIN"
+                                            value={zone.responsibleNom}
+                                            onChange={(e) =>
+                                                updateZone(
+                                                    zone.id,
+                                                    "responsibleNom",
+                                                    toNom(e.target.value)
+                                                )
+                                            }
+                                            className={cx(
+                                                errors[
+                                                    `zone_${zone.id}_responsibleNom`
+                                                ]
+                                            )}
+                                        />
+                                    </Field>
+                                    <Field label="Prénom" optional>
+                                        <input
+                                            type="text"
+                                            placeholder="Paul"
+                                            value={zone.responsiblePrenom}
+                                            onChange={(e) =>
+                                                updateZone(
+                                                    zone.id,
+                                                    "responsiblePrenom",
+                                                    toPrenom(e.target.value)
+                                                )
+                                            }
+                                            className={cx()}
+                                        />
+                                    </Field>
+                                </div>
                             </div>
                         </div>
                     ))}
                 </div>
-                <button
-                    type="button"
-                    onClick={addZone}
-                    className="mt-2 flex items-center gap-2 text-sm text-blue-700 hover:text-blue-900 transition-colors"
-                >
-                    <span className="text-lg leading-none">＋</span> Ajouter une
-                    zone
-                </button>
+
+                <div className="space-y-1">
+                    <button
+                        type="button"
+                        onClick={addZone}
+                        className="mt-2 flex items-center gap-2 text-sm text-blue-700 hover:text-blue-900 transition-colors"
+                    >
+                        <span className="text-lg leading-none">＋</span> Ajouter
+                        une zone
+                    </button>
+                    <p className="text-xs text-gray-400 pl-6">
+                        Uniquement si votre école comporte plusieurs bâtiments
+                        ou espaces de confinement séparés.
+                    </p>
+                </div>
             </Section>
 
-            {/* Affectation classes → zones */}
+            {/* ── 4. Affectation classes → zones (si multi-zones) ── */}
             {showClassMap && (
                 <Section title="Affectation des classes aux zones">
                     <p className="text-sm text-gray-500 mb-3">
@@ -396,7 +570,7 @@ export default function ConfigForm({
                                 key={cl}
                                 className="flex items-center gap-4 bg-white border border-gray-200 rounded-lg px-4 py-2.5"
                             >
-                                <span className="text-sm font-medium text-gray-700 w-32 shrink-0">
+                                <span className="text-sm font-medium text-gray-700 w-28 shrink-0">
                                     {cl}
                                 </span>
                                 <select
@@ -422,312 +596,255 @@ export default function ConfigForm({
                 </Section>
             )}
 
-            {/* Personnels */}
-            <Section title="Personnels de l'école">
-                {/* ── Cellule de crise — champ dédié, non supprimable ── */}
-                <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-3">
-                    <div className="flex items-center gap-2">
-                        <span className="text-base">🔴</span>
-                        <span className="text-sm font-semibold text-red-800">
-                            Responsable de la cellule de crise
-                        </span>
-                        <span className="ml-auto text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">
-                            Obligatoire
-                        </span>
-                    </div>
-                    <p className="text-xs text-red-700">
-                        Pilote la cellule de crise : communications externes
-                        (112, IEN, mairie), centralise les bilans. Apparaît en
-                        en-tête de la synthèse globale.
-                    </p>
-                    <div className="grid grid-cols-12 gap-2">
-                        <div className="col-span-5 sm:col-span-4">
-                            <input
-                                type="text"
-                                placeholder="Nom *"
-                                value={config.crisisCell.nom}
-                                onChange={(e) =>
-                                    setCrisisCell("nom", toNom(e.target.value))
-                                }
-                                className={
-                                    cx(errors.crisisCell_nom) + " text-sm"
-                                }
-                            />
-                            {errors.crisisCell_nom && (
-                                <p
-                                    className="text-xs text-red-500 mt-0.5"
-                                    role="alert"
-                                >
-                                    {errors.crisisCell_nom}
-                                </p>
-                            )}
-                        </div>
-                        <div className="col-span-4 sm:col-span-4">
-                            <input
-                                type="text"
-                                placeholder="Prénom"
-                                value={config.crisisCell.prenom}
-                                onChange={(e) =>
-                                    setCrisisCell(
-                                        "prenom",
-                                        toPrenom(e.target.value)
-                                    )
-                                }
-                                className={cx() + " text-sm"}
-                            />
-                        </div>
-                        <div className="col-span-3 sm:col-span-4">
-                            <select
-                                value={config.crisisCell.fonction}
-                                onChange={(e) =>
-                                    setCrisisCell("fonction", e.target.value)
-                                }
-                                className="w-full rounded-lg border border-gray-300 px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                            >
-                                {FONCTIONS_CRISE.map((f) => (
-                                    <option key={f} value={f}>
-                                        {f}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
-                </div>
+            {/* ── 5. Autres adultes ──────────────────────────────── */}
+            <Section title="Autres adultes">
+                <p className="text-sm text-gray-500">
+                    Saisir les adultes présents dans l'école hors enseignants —
+                    déjà extraits du CSV — et hors directeur/trice — déjà
+                    renseigné ci-dessus. Chaque adulte sera pointé sur la fiche
+                    de sa zone ou de sa classe.
+                </p>
 
-                {/* ── Autres personnels — liste ouverte ── */}
-                <div className="space-y-2 mt-2">
-                    <p className="text-sm text-gray-500">
-                        Autres adultes présents dans l'école, hors enseignants
-                        (extraits du CSV). Chaque adulte sera pointé sur la
-                        fiche de sa zone ou de sa classe.
-                    </p>
-
-                    {config.staff.length > 0 && (
-                        <div className="space-y-2">
-                            <div className="hidden sm:grid grid-cols-12 gap-2 px-3 text-xs text-gray-400 font-medium">
-                                <span className="col-span-3">Nom *</span>
-                                <span className="col-span-2">Prénom</span>
-                                <span className="col-span-3">Fonction</span>
-                                <span className="col-span-3">
-                                    Rattachement *
-                                </span>
-                            </div>
-                            {config.staff.map((s) => (
-                                <div
+                {/* Cartes staff */}
+                {config.staff.length > 0 && (
+                    <div className="space-y-2 mt-1">
+                        {config.staff.map((s) =>
+                            editingStaffIds.has(s.id) ? (
+                                <StaffCardEditing
                                     key={s.id}
-                                    className="grid grid-cols-12 gap-2 items-start bg-gray-50 border border-gray-200 rounded-lg p-3"
-                                >
-                                    <div className="col-span-6 sm:col-span-3">
-                                        <input
-                                            type="text"
-                                            placeholder="Nom"
-                                            value={s.nom}
-                                            onChange={(e) =>
-                                                updateStaff(
-                                                    s.id,
-                                                    "nom",
-                                                    toNom(e.target.value)
-                                                )
-                                            }
-                                            className={
-                                                cx(
-                                                    errors[`staff_${s.id}_nom`]
-                                                ) + " text-xs"
-                                            }
-                                        />
-                                        {errors[`staff_${s.id}_nom`] && (
-                                            <p className="text-xs text-red-500 mt-0.5">
-                                                {errors[`staff_${s.id}_nom`]}
-                                            </p>
-                                        )}
-                                    </div>
-                                    <div className="col-span-6 sm:col-span-2">
-                                        <input
-                                            type="text"
-                                            placeholder="Prénom"
-                                            value={s.prenom}
-                                            onChange={(e) =>
-                                                updateStaff(
-                                                    s.id,
-                                                    "prenom",
-                                                    toPrenom(e.target.value)
-                                                )
-                                            }
-                                            className={cx() + " text-xs"}
-                                        />
-                                    </div>
-                                    <div className="col-span-7 sm:col-span-3">
-                                        <select
-                                            value={s.fonction}
-                                            onChange={(e) =>
-                                                updateStaff(
-                                                    s.id,
-                                                    "fonction",
-                                                    e.target.value
-                                                )
-                                            }
-                                            className="w-full rounded-lg border border-gray-300 px-2 py-2 text-xs outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                                        >
-                                            <option value="">
-                                                — Fonction —
-                                            </option>
-                                            {FONCTIONS_STAFF.map((f) => (
-                                                <option key={f} value={f}>
-                                                    {f}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div className="col-span-4 sm:col-span-3">
-                                        <select
-                                            value={s.rattachement}
-                                            onChange={(e) =>
-                                                updateStaff(
-                                                    s.id,
-                                                    "rattachement",
-                                                    e.target.value
-                                                )
-                                            }
-                                            className={`w-full rounded-lg border px-2 py-2 text-xs outline-none focus:ring-2 focus:ring-blue-500 bg-white
-                        ${errors[`staff_${s.id}_rattachement`] ? "border-red-400 bg-red-50" : "border-gray-300"}`}
-                                        >
-                                            <option value="">
-                                                — Zone / Classe —
-                                            </option>
-                                            {rattachementOptions.map((o) => (
-                                                <option
-                                                    key={o.value}
-                                                    value={o.value}
-                                                >
-                                                    {o.label}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        {errors[
-                                            `staff_${s.id}_rattachement`
-                                        ] && (
-                                            <p className="text-xs text-red-500 mt-0.5">
-                                                {
-                                                    errors[
-                                                        `staff_${s.id}_rattachement`
-                                                    ]
-                                                }
-                                            </p>
-                                        )}
-                                    </div>
-                                    <div className="col-span-1 flex justify-center pt-1">
-                                        <button
-                                            type="button"
-                                            onClick={() => removeStaff(s.id)}
-                                            className="text-xs text-red-400 hover:text-red-700 transition-colors"
-                                            aria-label="Supprimer"
-                                        >
-                                            ✕
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
-                    <button
-                        type="button"
-                        onClick={addStaff}
-                        className="mt-1 flex items-center gap-2 text-sm text-blue-700 hover:text-blue-900 transition-colors"
-                    >
-                        <span className="text-lg leading-none">＋</span> Ajouter
-                        un personnel
-                    </button>
-
-                    {/* Lignes vierges intervenants */}
-                    <div className="flex items-center gap-3 mt-3 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
-                        <label className="text-sm text-gray-600 flex-1">
-                            Lignes vierges pour intervenants / personnels
-                            variables du jour
-                        </label>
-                        <input
-                            type="number"
-                            min="0"
-                            max="20"
-                            value={config.blankIntervenantRows}
-                            onChange={(e) =>
-                                setField(
-                                    "blankIntervenantRows",
-                                    Math.max(0, parseInt(e.target.value) || 0)
-                                )
-                            }
-                            className="w-16 rounded-lg border border-gray-300 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 text-center"
-                        />
+                                    staff={s}
+                                    onUpdate={(field, value) =>
+                                        updateStaff(s.id, field, value)
+                                    }
+                                    onValidate={() => validateStaff(s.id)}
+                                    onRemove={() => removeStaff(s.id)}
+                                    rattachementOptions={rattachementOptions}
+                                    errors={errors}
+                                />
+                            ) : (
+                                <StaffCardDisplay
+                                    key={s.id}
+                                    staff={s}
+                                    rattachementLabel={getRattachementLabel(
+                                        s.rattachement
+                                    )}
+                                    hasError={
+                                        !!errors[`staff_${s.id}_nom`] ||
+                                        !!errors[`staff_${s.id}_rattachement`]
+                                    }
+                                    onEdit={() => editStaff(s.id)}
+                                    onRemove={() => removeStaff(s.id)}
+                                />
+                            )
+                        )}
                     </div>
-                </div>
-            </Section>
+                )}
 
-            {/* Récapitulatif */}
-            <Section title="Documents qui seront générés">
-                <GenerationPreview config={config} classes={classes} />
-            </Section>
-
-            <div className="flex flex-wrap gap-3">
                 <button
                     type="button"
-                    onClick={onBack}
-                    className="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+                    onClick={addStaff}
+                    className="mt-2 flex items-center gap-2 text-sm text-blue-700 hover:text-blue-900 transition-colors"
                 >
-                    ← Retour à l'aperçu
+                    <span className="text-lg leading-none">＋</span> Ajouter un
+                    personnel
                 </button>
-                <button
-                    type="submit"
-                    className="px-6 py-2 text-sm bg-blue-800 text-white rounded-lg hover:bg-blue-900 font-medium transition-colors"
-                >
-                    Générer l'aperçu des fiches →
-                </button>
+
+                {/* Lignes vierges */}
+                <div className="flex items-center gap-3 mt-3 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
+                    <label className="text-sm text-gray-600 flex-1">
+                        Lignes vierges pour intervenants / personnels variables
+                        du jour
+                    </label>
+                    <input
+                        type="number"
+                        min="0"
+                        max="20"
+                        value={config.blankIntervenantRows}
+                        onChange={(e) =>
+                            setField(
+                                "blankIntervenantRows",
+                                Math.max(0, parseInt(e.target.value) || 0)
+                            )
+                        }
+                        className="w-16 rounded-lg border border-gray-300 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 text-center"
+                    />
+                </div>
+            </Section>
+
+            {/* ── Barre sticky — résumé + navigation ────────────── */}
+            <div className="sticky bottom-0 z-10 -mx-6 px-6 py-4 bg-white/95 backdrop-blur-sm border-t border-gray-200 shadow-[0_-2px_8px_rgba(0,0,0,0.08)]">
+                <p className="text-xs text-gray-400 mb-2 truncate">
+                    {summaryText}
+                </p>
+                <div className="flex flex-wrap gap-3">
+                    <button
+                        type="button"
+                        onClick={onBack}
+                        className="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+                    >
+                        ← Retour à l'aperçu
+                    </button>
+                    <button
+                        type="submit"
+                        className="px-6 py-2 text-sm bg-blue-800 text-white rounded-lg hover:bg-blue-900 font-medium transition-colors"
+                    >
+                        Générer les fiches →
+                    </button>
+                </div>
             </div>
         </form>
     );
 }
 
-// ── Récapitulatif ──────────────────────────────────────────────────
-function GenerationPreview({ config, classes }) {
-    const { configType, zones, crisisCell } = config;
-    const multiZone = zones.length > 1;
-    const criseName = crisisCell.nom
-        ? `${crisisCell.prenom} ${crisisCell.nom}`.trim()
-        : "—";
-
+// ── Carte staff — mode édition ─────────────────────────────────────
+function StaffCardEditing({
+    staff,
+    onUpdate,
+    onValidate,
+    onRemove,
+    rattachementOptions,
+    errors,
+}) {
     return (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-700 space-y-1.5">
-            {configType === "A" ? (
-                <p>
-                    → <strong>PPMS_Zone_{zones[0]?.name || "Zone"}.docx</strong>{" "}
-                    — adultes + tous élèves
-                </p>
-            ) : (
-                zones.map((z, i) => (
-                    <p key={z.id}>
-                        →{" "}
-                        <strong>
-                            PPMS_Zone_{z.name || `Zone${i + 1}`}.docx
-                        </strong>{" "}
-                        — adultes +{" "}
-                        {
-                            classes.filter((cl) =>
-                                multiZone
-                                    ? config.classZoneMap[cl] === z.id
-                                    : true
-                            ).length
-                        }{" "}
-                        classe(s)
+        <div className="bg-white border-2 border-blue-300 rounded-xl p-4 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+                <Field label="NOM" error={errors[`staff_${staff.id}_nom`]}>
+                    <input
+                        type="text"
+                        placeholder="GARCIA"
+                        value={staff.nom}
+                        onChange={(e) =>
+                            onUpdate("nom", e.target.value.toUpperCase())
+                        }
+                        className={cx(errors[`staff_${staff.id}_nom`])}
+                    />
+                </Field>
+                <Field label="Prénom" optional>
+                    <input
+                        type="text"
+                        placeholder="Ana"
+                        value={staff.prenom}
+                        onChange={(e) =>
+                            onUpdate(
+                                "prenom",
+                                e.target.value
+                                    .toLowerCase()
+                                    .replace(
+                                        /(^|\s|-)([a-zà-ÿ])/g,
+                                        (_, sep, c) => sep + c.toUpperCase()
+                                    )
+                            )
+                        }
+                        className={cx()}
+                    />
+                </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+                <Field label="Fonction" optional>
+                    <select
+                        value={staff.fonction}
+                        onChange={(e) => onUpdate("fonction", e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                        <option value="">— Sélectionner —</option>
+                        {FONCTIONS_STAFF.map((f) => (
+                            <option key={f} value={f}>
+                                {f}
+                            </option>
+                        ))}
+                    </select>
+                </Field>
+                <Field
+                    label="Rattachement"
+                    error={errors[`staff_${staff.id}_rattachement`]}
+                >
+                    <select
+                        value={staff.rattachement}
+                        onChange={(e) =>
+                            onUpdate("rattachement", e.target.value)
+                        }
+                        className={cx(errors[`staff_${staff.id}_rattachement`])}
+                    >
+                        <option value="">— Zone ou Classe —</option>
+                        {rattachementOptions.map((o) => (
+                            <option key={o.value} value={o.value}>
+                                {o.label}
+                            </option>
+                        ))}
+                    </select>
+                </Field>
+            </div>
+            <div className="flex items-center justify-between pt-1 border-t border-gray-100">
+                <button
+                    type="button"
+                    onClick={onRemove}
+                    className="text-xs text-red-400 hover:text-red-600 transition-colors"
+                >
+                    ✕ Supprimer
+                </button>
+                <button
+                    type="button"
+                    onClick={onValidate}
+                    className="text-xs px-3 py-1.5 bg-blue-700 text-white rounded-lg hover:bg-blue-800 transition-colors font-medium"
+                >
+                    Valider ✓
+                </button>
+            </div>
+        </div>
+    );
+}
+
+// ── Carte staff — mode affichage ───────────────────────────────────
+function StaffCardDisplay({
+    staff,
+    rattachementLabel,
+    hasError,
+    onEdit,
+    onRemove,
+}) {
+    return (
+        <div
+            className={`flex items-center justify-between rounded-xl px-4 py-3 group transition-colors
+      ${
+          hasError
+              ? "bg-red-50 border border-red-300"
+              : "bg-gray-50 border border-gray-200 hover:border-gray-300"
+      }`}
+        >
+            <div className="flex items-center gap-3 min-w-0">
+                <span className="text-base shrink-0">👤</span>
+                <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-800">
+                        {fullName(staff.nom, staff.prenom) || (
+                            <span className="text-red-500">Nom manquant</span>
+                        )}
                     </p>
-                ))
-            )}
-            <p>
-                → <strong>PPMS_Cellule_Crise.docx</strong> — synthèse globale
-                {multiZone ? " + synthèses par zone" : ""}
-            </p>
-            <p className="text-gray-500 text-xs">
-                Cellule de crise : {criseName}
-            </p>
-            <p className="text-gray-400 text-xs">La date est laissée vierge.</p>
+                    <p className="text-xs text-gray-500">
+                        {[
+                            staff.fonction || "Fonction non précisée",
+                            rattachementLabel,
+                        ].join("  ·  ")}
+                    </p>
+                </div>
+            </div>
+            <div className="flex gap-1 shrink-0">
+                <button
+                    type="button"
+                    onClick={onEdit}
+                    className="text-xs text-blue-500 hover:text-blue-700 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                    aria-label="Modifier"
+                >
+                    ✎
+                </button>
+                <button
+                    type="button"
+                    onClick={onRemove}
+                    className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                    aria-label="Supprimer"
+                >
+                    ✕
+                </button>
+            </div>
         </div>
     );
 }
@@ -744,14 +861,16 @@ function Section({ title, children }) {
     );
 }
 
-function Field({ label, hint, error, children }) {
+function Field({ label, hint, error, children, optional = false }) {
     return (
         <div className="space-y-1">
             <label className="block text-sm font-medium text-gray-700">
-                {label}{" "}
-                <span className="text-red-500" aria-hidden>
-                    *
-                </span>
+                {label}
+                {!optional && (
+                    <span className="text-red-500 ml-0.5" aria-hidden>
+                        *
+                    </span>
+                )}
             </label>
             {hint && (
                 <p className="text-xs text-gray-400 leading-relaxed">{hint}</p>
