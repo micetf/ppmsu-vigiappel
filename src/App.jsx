@@ -39,27 +39,8 @@ export default function App() {
             {/* Navbar micetf.fr — fixe, z-50 */}
             <Navbar />
 
-            {/* Header app — pt-14 pour passer sous la navbar fixe */}
-            <header className="bg-blue-800 text-white py-4 px-6 shadow-md mt-14">
-                <div className="max-w-4xl mx-auto flex items-center justify-between">
-                    <div className="flex items-baseline gap-3">
-                        <h1 className="text-xl font-bold tracking-tight">
-                            VigiAppel
-                        </h1>
-                        <span className="text-blue-300 text-sm">
-                            Générateur de fiches PPMS
-                        </span>
-                    </div>
-                    {step > 1 && (
-                        <button
-                            onClick={handleReset}
-                            className="text-xs text-blue-300 hover:text-white border border-blue-600 hover:border-blue-400 rounded-lg px-3 py-1.5 transition-colors"
-                        >
-                            ↺ Recommencer
-                        </button>
-                    )}
-                </div>
-            </header>
+            {/* h1 masqué visuellement mais présent pour l'accessibilité et le SEO */}
+            <h1 className="sr-only">VigiAppel — Générateur de fiches PPMS</h1>
 
             {/* Contenu principal */}
             <main className="flex-1 max-w-4xl mx-auto w-full p-6">
