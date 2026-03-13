@@ -560,7 +560,7 @@ export default function ConfigForm({ classes, onSubmit, onBack }) {
 
 // ── Récapitulatif ──────────────────────────────────────────────────
 function GenerationPreview({ config, classes }) {
-    const { configType, zones, staff, blankIntervenantRows } = config;
+    const { configType, zones, staff } = config;
     const multiZone = zones.length > 1;
     const cellule = staff.filter((s) => s.rattachement === "cellule");
     const fileCount = (configType === "A" ? 1 : zones.length) + 1;
