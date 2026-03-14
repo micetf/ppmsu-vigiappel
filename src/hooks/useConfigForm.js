@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocalStorage } from "./useLocalStorage";
 import {
     emptyAdult,
     newZoneId,
@@ -7,19 +8,34 @@ import {
 } from "../utils/config/defaults";
 import { validateConfig, getStaffInError } from "../utils/config/validation";
 
+const STORAGE_KEY = "vigiappel_config";
+
 export function useConfigForm(classes, initialConfig) {
-    const [config, setConfig] = useState(
-        () => initialConfig ?? makeInitialConfig(classes)
+    const defaultConfig = initialConfig ?? makeInitialConfig(classes);
+
+    const [config, setConfig, clearConfig] = useLocalStorage(
+        STORAGE_KEY,
+        defaultConfig
     );
     const [errors, setErrors] = useState({});
 
-    // ── Champ simple ──────────────────────────────────────────────
+    // Détecte si la config restaurée diffère de la config initiale fraîche
+    const isRestored =
+        !initialConfig &&
+        JSON.stringify(config) !== JSON.stringify(makeInitialConfig(classes));
+
+    const reset = () => {
+        clearConfig();
+        setErrors({});
+    };
+
+    // ── Setters ────────────────────────────────────────────────────
     const setField = (field, value) => {
         setConfig((p) => ({ ...p, [field]: value }));
         setErrors((p) => ({ ...p, [field]: undefined }));
     };
 
-    // ── Zones ─────────────────────────────────────────────────────
+    // ── Zones ──────────────────────────────────────────────────────
     const updateZoneName = (id, name) =>
         setConfig((p) => ({
             ...p,
@@ -79,7 +95,7 @@ export function useConfigForm(classes, initialConfig) {
             classZoneMap: { ...p.classZoneMap, [cl]: zoneId },
         }));
 
-    // ── Co-titulaires / décharges ─────────────────────────────────
+    // ── Co-titulaires ──────────────────────────────────────────────
     const addExtraTeacher = (cl) =>
         setConfig((p) => ({
             ...p,
@@ -98,10 +114,7 @@ export function useConfigForm(classes, initialConfig) {
             list[idx] = { ...list[idx], [field]: value };
             return {
                 ...p,
-                classExtraTeachers: {
-                    ...p.classExtraTeachers,
-                    [cl]: list,
-                },
+                classExtraTeachers: { ...p.classExtraTeachers, [cl]: list },
             };
         });
 
@@ -116,11 +129,11 @@ export function useConfigForm(classes, initialConfig) {
             },
         }));
 
-    // ── Staff ─────────────────────────────────────────────────────
+    // ── Staff ──────────────────────────────────────────────────────
     const addStaff = () => {
         const s = newStaff();
         setConfig((p) => ({ ...p, staff: [...p.staff, s] }));
-        return s.id; // retourné pour ouvrir en mode édition côté UI
+        return s.id;
     };
 
     const updateStaff = (id, field, value) => {
@@ -139,7 +152,7 @@ export function useConfigForm(classes, initialConfig) {
             staff: p.staff.filter((s) => s.id !== id),
         }));
 
-    // ── Soumission ────────────────────────────────────────────────
+    // ── Soumission ─────────────────────────────────────────────────
     const submit = (onSubmit) => {
         const errs = validateConfig(config);
         if (Object.keys(errs).length > 0) {
@@ -156,6 +169,8 @@ export function useConfigForm(classes, initialConfig) {
     return {
         config,
         errors,
+        isRestored,
+        reset,
         setField,
         updateZoneName,
         setZoneResponsible,

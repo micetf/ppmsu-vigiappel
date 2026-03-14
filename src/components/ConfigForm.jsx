@@ -29,7 +29,7 @@ export default function ConfigForm({
     const [showFormatOptions, setShowFormatOptions] = useState(false);
     const [editingStaffIds, setEditingStaffIds] = useState(new Set());
 
-    const { config, errors } = form; // alias locaux pour lisibilité du JSX
+    const { config, errors, isRestored, reset } = form; // alias locaux pour lisibilité du JSX
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -61,6 +61,25 @@ export default function ConfigForm({
 
     return (
         <form onSubmit={handleSubmit} noValidate className="space-y-8 pb-28">
+            {isRestored && (
+                <div className="flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                    <div className="flex items-center gap-2 text-sm text-amber-800">
+                        <span>🔄</span>
+                        <span>
+                            Configuration restaurée depuis votre dernière
+                            session.
+                        </span>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={reset}
+                        className="text-xs text-amber-700 hover:text-amber-900 underline shrink-0 transition-colors"
+                    >
+                        Effacer et recommencer
+                    </button>
+                </div>
+            )}
+
             <StepHelp
                 stepKey="step3"
                 title="Comment remplir cette configuration ?"
