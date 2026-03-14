@@ -1,9 +1,11 @@
-@import "tailwindcss";
-
-@layer utilities {
-    .no-print {
-        @media print {
-            display: none !important;
-        }
+/* Raccourcis formulaire – utilisés dans ConfigForm + subcomponents */
+@layer components {
+    .label {
+        @apply block text-xs font-medium text-gray-600 mb-1;
+    }
+    .input {
+        @apply w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm
+           outline-none focus:ring-2 focus:ring-blue-500 hover:border-gray-400
+           transition-colors;
     }
 }
