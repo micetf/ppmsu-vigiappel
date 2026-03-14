@@ -1,7 +1,8 @@
 import StepHelp from "./StepHelp";
 import ClassNamesSection from "./normalization/ClassNamesSection";
 import TeacherNamesSection from "./normalization/TeacherNamesSection";
-import StaffPreFillSection from "./normalization/StaffPreFillSection";
+import ExtraTeachersSection from "./normalization/ExtraTeachersSection";
+import OtherAdultsSection from "./normalization/OtherAdultsSection";
 import { applyCorrections } from "../utils/normalization";
 
 export default function NormalizationStep({
@@ -11,7 +12,6 @@ export default function NormalizationStep({
     onBack,
 }) {
     const { corrections } = norm;
-
     const preview = applyCorrections(csvData, corrections);
 
     const dirtyCount =
@@ -31,17 +31,24 @@ export default function NormalizationStep({
             >
                 <div className="pt-3 space-y-2 text-sm">
                     <p>
-                        <strong>📝 Noms des classes</strong> — Corriger les
-                        libellés du CSV ("Cours Préparatoire" → "CP").
+                        <strong>1. Noms des classes</strong> — Corriger les
+                        libellés du CSV si nécessaire.
                     </p>
                     <p>
-                        <strong>👩‍🏫 Enseignants</strong> — Nom et prénom séparés
-                        automatiquement. Corriger si nécessaire.
+                        <strong>2. Enseignants</strong> — Séparer et corriger
+                        nom et prénom.
                     </p>
                     <p>
-                        <strong>👥 Adultes complémentaires</strong> — AESH,
-                        ATSEM, co-titulaires… Ils pré-rempliront la
-                        configuration PPMS.
+                        <strong>3. Co-enseignants / décharges</strong> —
+                        Déclarer les adultes qui partagent une classe.
+                    </p>
+                    <p>
+                        <strong>4. Autres adultes</strong> — AESH, ATSEM, Maître
+                        E, intervenants réguliers…
+                    </p>
+                    <p className="text-xs text-blue-700 bg-blue-100 rounded-lg px-3 py-2 mt-1">
+                        💡 L'affectation PPMS (zones, cellule de crise) se fait
+                        à l'étape suivante.
                     </p>
                 </div>
             </StepHelp>
@@ -57,13 +64,13 @@ export default function NormalizationStep({
                     {csvData.totalStudents > 1 ? "s" : ""}
                     {dirtyCount > 0 && (
                         <span className="ml-2 text-blue-700 font-medium">
-                            · {dirtyCount} correction
-                            {dirtyCount > 1 ? "s" : ""}
+                            · {dirtyCount} correction{dirtyCount > 1 ? "s" : ""}
                         </span>
                     )}
                 </p>
             </div>
 
+            {/* 1 — Noms des classes */}
             <ClassNamesSection
                 classes={csvData.classes}
                 corrections={corrections}
@@ -71,28 +78,35 @@ export default function NormalizationStep({
                 onReset={norm.resetClassName}
             />
 
+            {/* 2 — Enseignants */}
             <TeacherNamesSection
                 classes={preview.classes}
                 rawTeacherByClass={preview.rawTeacherByClass}
                 corrections={corrections}
-                onSetField={norm.setTeacherField} // ← nom exact attendu par le composant
+                onSetField={norm.setTeacherField}
                 onReset={norm.resetTeacherName}
                 onSwap={norm.swapTeacher}
             />
 
-            <StaffPreFillSection
+            {/* 3 — Co-enseignants et décharges */}
+            <ExtraTeachersSection
                 classes={preview.classes}
-                staff={corrections.staff}
                 classExtraTeachers={corrections.classExtraTeachers}
-                onAddStaff={norm.addStaff}
-                onUpdateStaff={norm.updateStaff}
-                onRemoveStaff={norm.removeStaff}
-                onAddExtra={norm.addExtraTeacher}
-                onUpdateExtra={norm.updateExtraTeacher}
-                onRemoveExtra={norm.removeExtraTeacher}
+                onAdd={norm.addExtraTeacher}
+                onUpdate={norm.updateExtraTeacher}
+                onRemove={norm.removeExtraTeacher}
             />
 
-            {/* ── Barre sticky ──────────────────────────────────── */}
+            {/* 4 — Autres adultes */}
+            <OtherAdultsSection
+                classes={preview.classes}
+                staff={corrections.staff}
+                onAdd={norm.addStaff}
+                onUpdate={norm.updateStaff}
+                onRemove={norm.removeStaff}
+            />
+
+            {/* Barre sticky */}
             <div className="sticky bottom-0 z-10 -mx-6 px-6 py-4 bg-white/95 backdrop-blur-sm border-t border-gray-200 shadow-[0_-2px_8px_rgba(0,0,0,0.08)]">
                 <div className="flex flex-wrap gap-3">
                     <button
