@@ -1,5 +1,11 @@
 // src/components/StepIndicator.jsx — version navigable
-const STEPS = ["Import CSV", "Aperçu", "Configuration", "Export DOCX"];
+const STEPS = [
+    "Import CSV",
+    "Aperçu",
+    "Normalisation",
+    "Configuration",
+    "Export DOCX",
+];
 
 export default function StepIndicator({ current, onGoTo }) {
     return (

@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { useLocalStorage } from "./useLocalStorage";
+import { useState, useEffect } from "react";
 import {
     emptyAdult,
     newZoneId,
@@ -11,13 +10,28 @@ import { validateConfig, getStaffInError } from "../utils/config/validation";
 const STORAGE_KEY = "vigiappel_config";
 
 export function useConfigForm(classes, initialConfig) {
-    const defaultConfig = initialConfig ?? makeInitialConfig(classes);
-
-    const [config, setConfig, clearConfig] = useLocalStorage(
-        STORAGE_KEY,
-        defaultConfig
-    );
+    const [config, setConfig] = useState(() => {
+        // initialConfig (fusion post-normalisation) a toujours la priorité
+        if (initialConfig) return initialConfig;
+        // Sinon restauration depuis localStorage
+        try {
+            const stored = localStorage.getItem(STORAGE_KEY);
+            if (stored) return JSON.parse(stored);
+        } catch {
+            console.log("Erreur config");
+        }
+        return makeInitialConfig(classes);
+    });
     const [errors, setErrors] = useState({});
+
+    // Persistance automatique à chaque modification
+    useEffect(() => {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+        } catch {
+            console.log("Erreur config");
+        }
+    }, [config]);
 
     // Détecte si la config restaurée diffère de la config initiale fraîche
     const isRestored =
@@ -25,7 +39,12 @@ export function useConfigForm(classes, initialConfig) {
         JSON.stringify(config) !== JSON.stringify(makeInitialConfig(classes));
 
     const reset = () => {
-        clearConfig();
+        try {
+            localStorage.removeItem(STORAGE_KEY);
+        } catch {
+            console.log("Erreur config");
+        }
+        setConfig(makeInitialConfig(classes));
         setErrors({});
     };
 

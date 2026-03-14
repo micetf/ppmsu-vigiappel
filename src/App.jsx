@@ -1,32 +1,67 @@
 import { useState } from "react";
-import Navbar from "./components/Navbar"; // ← nouveau
+import Navbar from "./components/Navbar";
 import StepIndicator from "./components/StepIndicator";
 import FileUpload from "./components/FileUpload";
 import DataPreview from "./components/DataPreview";
+import NormalizationStep from "./components/NormalizationStep";
 import ConfigForm from "./components/ConfigForm";
 import GenerationPanel from "./components/GenerationPanel";
 import { useCSVData } from "./hooks/useCSVData";
+import { buildPreConfig } from "./utils/normalization";
+
+const STORAGE_KEY = "vigiappel_config";
 
 export default function App() {
     const [step, setStep] = useState(1);
     const [csvResult, setCsvResult] = useState(null);
+    const [normalizedCsvData, setNormalizedCsvData] = useState(null);
+    const [initialConfig, setInitialConfig] = useState(null);
     const [config, setConfig] = useState(null);
 
     const csvData = useCSVData(csvResult);
-    const { classes, totalStudents, teacherByClass } = csvData;
 
     const handleParsed = (result) => {
         setCsvResult(result);
         setStep(2);
     };
+
     const handleReset = () => {
         setCsvResult(null);
+        setNormalizedCsvData(null);
+        setInitialConfig(null);
         setConfig(null);
         setStep(1);
     };
+
+    // ── Sortie de NormalizationStep ────────────────────────────────
+    const handleNormalized = (corrections, preview) => {
+        setNormalizedCsvData(preview);
+
+        // Fusion partielle : conserve école/zones/crisisCell,
+        // remplace staff et classExtraTeachers
+        const preConfig = buildPreConfig(corrections);
+        try {
+            const stored = localStorage.getItem(STORAGE_KEY);
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                setInitialConfig({
+                    ...parsed,
+                    staff: preConfig.staff,
+                    classExtraTeachers: preConfig.classExtraTeachers,
+                });
+            } else {
+                setInitialConfig(preConfig);
+            }
+        } catch {
+            setInitialConfig(preConfig);
+        }
+
+        setStep(4);
+    };
+
     const handleConfig = (cfg) => {
         setConfig(cfg);
-        setStep(4);
+        setStep(5);
     };
 
     function handleGoTo(n) {
@@ -34,50 +69,55 @@ export default function App() {
         else setStep(n);
     }
 
+    // csvData actif = normalisé si disponible, brut sinon
+    const activeCsvData = normalizedCsvData ?? csvData;
+    const { classes, teacherByClass } = activeCsvData;
+
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col">
-            {/* Navbar micetf.fr — fixe, z-50 */}
+        <div className="min-h-screen bg-gray-50">
             <Navbar />
-
-            {/* h1 masqué visuellement mais présent pour l'accessibilité et le SEO */}
-            <h1 className="sr-only">VigiAppel — Générateur de fiches PPMS</h1>
-
-            {/* Contenu principal */}
-            <main className="flex-1 max-w-4xl mx-auto w-full p-6">
+            <div className="max-w-3xl mx-auto px-4 py-8 space-y-8 pt-24">
                 <StepIndicator current={step} onGoTo={handleGoTo} />
 
                 {step === 1 && <FileUpload onParsed={handleParsed} />}
-                {step === 2 && csvResult && (
+
+                {step === 2 && (
                     <DataPreview
                         result={csvResult}
                         onReset={handleReset}
                         onNext={() => setStep(3)}
                     />
                 )}
-                {step === 3 && csvResult && (
+
+                {step === 3 && (
+                    <NormalizationStep
+                        csvData={csvData}
+                        onConfirm={handleNormalized}
+                        onBack={() => setStep(2)}
+                    />
+                )}
+
+                {step === 4 && (
                     <ConfigForm
                         classes={classes}
                         teacherByClass={teacherByClass}
+                        initialConfig={initialConfig}
                         onSubmit={handleConfig}
-                        onBack={() => setStep(2)}
-                        initialConfig={config}
-                    />
-                )}
-                {step === 4 && config && (
-                    <GenerationPanel
-                        config={config}
-                        csvData={csvData}
-                        classes={classes}
-                        totalStudents={totalStudents}
                         onBack={() => setStep(3)}
                     />
                 )}
-            </main>
 
-            <footer className="text-center text-xs text-gray-400 py-3 border-t border-gray-200">
-                VigiAppel — Traitement 100&nbsp;% local · Aucune donnée
-                transmise · Conforme RGPD · Modèle Eduscol PPMS 2024
-            </footer>
+                {step === 5 && (
+                    <GenerationPanel
+                        config={config}
+                        csvData={activeCsvData}
+                        classes={classes}
+                        totalStudents={activeCsvData.totalStudents}
+                        onBack={() => setStep(4)}
+                        onReset={handleReset}
+                    />
+                )}
+            </div>
         </div>
     );
 }
