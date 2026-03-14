@@ -1,17 +1,11 @@
 // src/components/StepIndicator.jsx — version navigable
-// StepIndicator.jsx — adapter le tableau des labels
-const STEPS = [
-    { n: 1, label: "Import" },
-    { n: 2, label: "Aperçu" },
-    { n: 3, label: "Adultes" }, // ← nouveau
-    { n: 4, label: "Config." },
-    { n: 5, label: "Fiches" },
-];
+const STEPS = ["Import CSV", "Aperçu", "Configuration", "Export DOCX"];
 
 export default function StepIndicator({ current, onGoTo }) {
     return (
         <ol className="flex flex-wrap items-center gap-2 mb-8 text-sm select-none">
-            {STEPS.map(({ n, label }, i) => {
+            {STEPS.map((label, i) => {
+                const n = i + 1;
                 const done = n < current;
                 const active = n === current;
                 const clickable = done && onGoTo;
@@ -23,13 +17,13 @@ export default function StepIndicator({ current, onGoTo }) {
                             disabled={!clickable}
                             onClick={() => clickable && onGoTo(n)}
                             className={`flex items-center gap-2 group outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded
-          ${clickable ? "cursor-pointer" : "cursor-default"}`}
+                ${clickable ? "cursor-pointer" : "cursor-default"}`}
                         >
                             <span
                                 className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 transition-colors
-          ${done ? "bg-green-600 text-white group-hover:bg-green-700" : ""}
-          ${active ? "bg-blue-800 text-white" : ""}
-          ${!done && !active ? "bg-gray-200 text-gray-500" : ""}`}
+                ${done ? "bg-green-600 text-white group-hover:bg-green-700" : ""}
+                ${active ? "bg-blue-800 text-white" : ""}
+                ${!done && !active ? "bg-gray-200 text-gray-500" : ""}`}
                             >
                                 {done ? "✓" : n}
                             </span>
@@ -42,7 +36,7 @@ export default function StepIndicator({ current, onGoTo }) {
                                           : "text-gray-400"
                                 }
                             >
-                                {label} {/* ← string, plus d'objet */}
+                                {label}
                             </span>
                         </button>
                         {i < STEPS.length - 1 && (
