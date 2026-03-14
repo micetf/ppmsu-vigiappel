@@ -14,9 +14,10 @@ export default function StaffPreFillSection({
     onUpdateExtra,
     onRemoveExtra,
 }) {
-    // Options de rattachement disponibles à cette étape (pas de zones encore)
+    // Options de rattachement à cette étape (pas de zones encore).
+    // L'option "cellule" a été supprimée — les membres de la cellule de
+    // crise sont désignés dans ConfigForm via CrisisCellSection.
     const rattachementOptions = [
-        { value: "cellule", label: "Cellule de crise" },
         ...classes.map((cl) => ({
             value: `class_${cl}`,
             label: `Classe ${cl}`,
@@ -39,7 +40,7 @@ export default function StaffPreFillSection({
             {/* ── Adultes de l'école (staff) ──────────────────────── */}
             <div className="mt-4 space-y-3">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    Adultes rattachés à une classe ou à la cellule de crise
+                    Adultes rattachés à une classe
                 </p>
 
                 {staff.length > 0 && (
@@ -113,13 +114,15 @@ export default function StaffPreFillSection({
                                         }
                                         className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
                                     >
-                                        <option value="">— À définir —</option>
-                                        {rattachementOptions.map((o) => (
+                                        <option value="">
+                                            — Sélectionner —
+                                        </option>
+                                        {rattachementOptions.map((opt) => (
                                             <option
-                                                key={o.value}
-                                                value={o.value}
+                                                key={opt.value}
+                                                value={opt.value}
                                             >
-                                                {o.label}
+                                                {opt.label}
                                             </option>
                                         ))}
                                     </select>
@@ -209,7 +212,7 @@ export default function StaffPreFillSection({
                                         </label>
                                         <input
                                             type="text"
-                                            placeholder="Claire"
+                                            placeholder="Lucie"
                                             value={et.prenom}
                                             onChange={(e) =>
                                                 onUpdateExtra(
@@ -224,7 +227,7 @@ export default function StaffPreFillSection({
                                     </div>
                                     <div>
                                         <label className="block text-xs font-medium text-gray-600 mb-1">
-                                            Rôle
+                                            Fonction
                                         </label>
                                         <select
                                             value={et.fonction}

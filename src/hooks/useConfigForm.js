@@ -4,14 +4,6 @@
  * Hook central de l'étape de configuration PPMS.
  * Seul endroit de l'application qui mute `config` — aucun composant
  * ne doit modifier config directement.
- *
- * Évolution Sprint 5 :
- * - Migration silencieuse du localStorage (v0 crisisCell → v1 crisis)
- * - Nouveaux setters : setCrisisResponsible, addCrisisMember,
- *   updateCrisisMember, removeCrisisMember, setSupervision
- * - Dérivés exposés : vacancies, assignedIds
- * - setField("crisisCell", v) maintient crisis.responsible en sync
- *   (compat ConfigForm jusqu'au Sprint D)
  */
 
 import { useState, useEffect } from "react";
@@ -94,23 +86,8 @@ export function useConfigForm(classes, initialConfig) {
 
     // ── Setter générique ───────────────────────────────────────────────────
 
-    /**
-     * Met à jour un champ racine de config.
-     *
-     * Compat Sprint C : si field === "crisisCell", synchronise aussi
-     * crisis.responsible pour maintenir la cohérence du modèle v1
-     * pendant que ConfigForm utilise encore l'ancien nom de champ.
-     * Ce comportement est supprimé lors du Sprint D avec ConfigForm.
-     */
     const setField = (field, value) => {
-        setConfig((p) => {
-            const next = { ...p, [field]: value };
-            // COMPAT Sprint C — supprimé Sprint D
-            if (field === "crisisCell") {
-                next.crisis = { ...p.crisis, responsible: value };
-            }
-            return next;
-        });
+        setConfig((p) => ({ ...p, [field]: value }));
         setErrors((prev) => ({ ...prev, [field]: undefined }));
     };
 
@@ -175,23 +152,15 @@ export function useConfigForm(classes, initialConfig) {
             classZoneMap: { ...p.classZoneMap, [cl]: zoneId },
         }));
 
-    // ── Cellule de crise (nouveaux setters Sprint 5) ───────────────────────
+    // ── Cellule de crise (Sprint 5) ────────────────────────────────────────
 
-    /**
-     * Remplace le responsable de la cellule de crise.
-     * Maintient crisisCell en sync pour la compat ConfigForm (Sprint C).
-     */
+    /** Remplace le responsable de la cellule de crise. */
     const setCrisisResponsible = (ref) => {
         setConfig((p) => ({
             ...p,
             crisis: { ...p.crisis, responsible: ref },
-            crisisCell: ref, // COMPAT Sprint C — supprimé Sprint D
         }));
-        setErrors((prev) => ({
-            ...prev,
-            crisisResponsible: undefined,
-            crisisCell: undefined, // COMPAT Sprint C
-        }));
+        setErrors((prev) => ({ ...prev, crisisResponsible: undefined }));
     };
 
     /** Ajoute un membre vide à la cellule de crise. */
