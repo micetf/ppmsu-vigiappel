@@ -104,9 +104,16 @@ export function useNormalization() {
                 ),
             },
         }));
-
+    const reset = () =>
+        setCorrections({
+            classNames: {},
+            teacherNames: {},
+            staff: [],
+            classExtraTeachers: {},
+        });
     return {
         corrections,
+        reset,
         setClassName,
         resetClassName,
         setTeacherName,

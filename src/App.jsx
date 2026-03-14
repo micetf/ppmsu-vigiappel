@@ -8,6 +8,7 @@ import ConfigForm from "./components/ConfigForm";
 import GenerationPanel from "./components/GenerationPanel";
 import { useCSVData } from "./hooks/useCSVData";
 import { buildPreConfig } from "./utils/normalization";
+import { useNormalization } from "./hooks/useNormalization";
 
 const STORAGE_KEY = "vigiappel_config";
 
@@ -19,26 +20,11 @@ export default function App() {
     const [config, setConfig] = useState(null);
 
     const csvData = useCSVData(csvResult);
+    const norm = useNormalization();
 
-    const handleParsed = (result) => {
-        setCsvResult(result);
-        setStep(2);
-    };
-
-    const handleReset = () => {
-        setCsvResult(null);
-        setNormalizedCsvData(null);
-        setInitialConfig(null);
-        setConfig(null);
-        setStep(1);
-    };
-
-    // ── Sortie de NormalizationStep ────────────────────────────────
     const handleNormalized = (corrections, preview) => {
         setNormalizedCsvData(preview);
-
-        // Fusion partielle : conserve école/zones/crisisCell,
-        // remplace staff et classExtraTeachers
+        // corrections vient maintenant de norm.corrections (déjà à jour)
         const preConfig = buildPreConfig(corrections);
         try {
             const stored = localStorage.getItem(STORAGE_KEY);
@@ -55,8 +41,21 @@ export default function App() {
         } catch {
             setInitialConfig(preConfig);
         }
-
         setStep(4);
+    };
+
+    const handleParsed = (result) => {
+        setCsvResult(result);
+        setStep(2);
+    };
+
+    const handleReset = () => {
+        setCsvResult(null);
+        setNormalizedCsvData(null);
+        setInitialConfig(null);
+        setConfig(null);
+        norm.reset();
+        setStep(1);
     };
 
     const handleConfig = (cfg) => {
@@ -92,6 +91,7 @@ export default function App() {
                 {step === 3 && (
                     <NormalizationStep
                         csvData={csvData}
+                        norm={norm}
                         onConfirm={handleNormalized}
                         onBack={() => setStep(2)}
                     />

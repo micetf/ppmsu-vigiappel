@@ -2,11 +2,14 @@ import StepHelp from "./StepHelp";
 import ClassNamesSection from "./normalization/ClassNamesSection";
 import TeacherNamesSection from "./normalization/TeacherNamesSection";
 import StaffPreFillSection from "./normalization/StaffPreFillSection";
-import { useNormalization } from "../hooks/useNormalization";
 import { applyCorrections } from "../utils/normalization";
 
-export default function NormalizationStep({ csvData, onConfirm, onBack }) {
-    const norm = useNormalization();
+export default function NormalizationStep({
+    csvData,
+    norm,
+    onConfirm,
+    onBack,
+}) {
     const { corrections } = norm;
 
     // Prévisualisation en temps réel des noms normalisés
