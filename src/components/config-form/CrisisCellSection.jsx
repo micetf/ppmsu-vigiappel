@@ -9,7 +9,7 @@
  *   teachers          { [className]: fullName }
  *   staff             [{ id, nom, prenom, fonction }]
  *   assignedIds       Set<string>
- *   classSupervision  Record<classe, AdultRef|null>  ← nouveau
+ *   classSupervision  Record<classe, AdultRef|null>
  *   errors            objet d'erreurs
  */
 
@@ -17,24 +17,18 @@ import AdultSelector from "../AdultSelector";
 import { emptyAdult } from "../../utils/config/defaults";
 import { getAdultId } from "../../utils/config/adultId";
 
-// ── Sous-composant : badge d'état de la classe ────────────────────────────────
-// Affiche ⚠️ si la vacance n'est pas couverte, ✅ si elle l'est.
+// ── Badge d'état de la classe ─────────────────────────────────────────────────
 
 function VacancyBadge({ teacherClass, classSupervision }) {
     if (!teacherClass) return null;
-
     const isCovered = !!classSupervision?.[teacherClass];
 
-    if (isCovered) {
-        return (
-            <p className="mt-1.5 text-xs text-green-800 bg-green-50 border border-green-200 rounded-lg px-3 py-1.5 flex items-center gap-1.5">
-                <span aria-hidden="true">✅</span>
-                Classe <strong>{teacherClass}</strong> — superviseur désigné.
-            </p>
-        );
-    }
-
-    return (
+    return isCovered ? (
+        <p className="mt-1.5 text-xs text-green-800 bg-green-50 border border-green-200 rounded-lg px-3 py-1.5 flex items-center gap-1.5">
+            <span aria-hidden="true">✅</span>
+            Classe <strong>{teacherClass}</strong> — superviseur désigné.
+        </p>
+    ) : (
         <p className="mt-1.5 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 flex items-center gap-1.5">
             <span aria-hidden="true">⚠️</span>
             Classe <strong>{teacherClass}</strong> sans encadrant — à couvrir
@@ -43,7 +37,7 @@ function VacancyBadge({ teacherClass, classSupervision }) {
     );
 }
 
-// ── Sous-composant : ligne membre ─────────────────────────────────────────────
+// ── Ligne membre ──────────────────────────────────────────────────────────────
 
 function MemberRow({
     member,
@@ -76,6 +70,10 @@ function MemberRow({
                 teachers={teachers}
                 staff={staff}
                 excludeIds={excludeIds}
+                allowManual={false}
+                // Pas de fonctionOptions — un membre de cellule n'a pas
+                // de titre PPMS spécifique, il apparaît simplement sur
+                // la fiche de recensement de la cellule de crise.
             />
             {member.source === "teacher" && member.teacherClass && (
                 <VacancyBadge
@@ -101,8 +99,6 @@ export default function CrisisCellSection({
     const responsible = crisis?.responsible ?? emptyAdult("Directeur/trice");
     const members = crisis?.members ?? [];
 
-    // ── Mutations ─────────────────────────────────────────────────
-
     const setResponsible = (ref) =>
         onChange({ ...crisis, responsible: ref, members });
 
@@ -126,14 +122,10 @@ export default function CrisisCellSection({
             members: members.filter((_, i) => i !== idx),
         });
 
-    // ── excludeIds par sélecteur ──────────────────────────────────
-
     const responsibleId = getAdultId(responsible);
     const excludeForResponsible = [...assignedIds].filter(
         (id) => id !== responsibleId
     );
-
-    // ── Rendu ─────────────────────────────────────────────────────
 
     return (
         <div className="space-y-4">
@@ -154,10 +146,11 @@ export default function CrisisCellSection({
                     teachers={teachers}
                     staff={staff}
                     excludeIds={excludeForResponsible}
+                    allowManual={false}
                     error={errors.crisisResponsible}
-                    // Pas de fonctionOptions : le fallback "Directeur/trice"
-                    // dans le docx couvre le cas courant. La saisie manuelle
-                    // permet de préciser si nécessaire (faisant-fonction, etc.)
+                    // Pas de fonctionOptions — le docx utilise "Directeur/trice"
+                    // par défaut ; la saisie manuelle reste possible si besoin
+                    // via allowManual=true mais ce n'est pas le cas courant.
                 />
                 {responsible.source === "teacher" &&
                     responsible.teacherClass && (
@@ -196,7 +189,6 @@ export default function CrisisCellSection({
                 </div>
             )}
 
-            {/* ── Bouton ajouter un membre ──────────────────────── */}
             <button
                 type="button"
                 onClick={addMember}
@@ -208,8 +200,8 @@ export default function CrisisCellSection({
                 Ajouter un membre à la cellule
             </button>
             <p className="text-xs text-gray-400 pl-6 -mt-2">
-                Optionnel. Adultes qui assistent le/la responsable sans gérer de
-                classe pendant le PPMS.
+                Optionnel. Adultes qui assistent le/la responsable et figurent
+                sur la fiche de recensement de la cellule de crise.
             </p>
         </div>
     );

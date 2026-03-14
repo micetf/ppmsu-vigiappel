@@ -1,29 +1,24 @@
 /**
  * AdultSelector.jsx
  * ─────────────────
- * Sélecteur d'adulte partagé : cellule de crise, responsables de zone,
- * membres de cellule.
+ * Sélecteur d'adulte : enseignants (CSV) et personnels saisis.
  *
- * Trois sources : "teacher" (depuis CSV), "staff" (saisi), "manual" (libre).
- *
- * Évolution Sprint 5 :
- * - Suppression de showSubstitute / substituteTitle / logique substitute.
- *   La substitution est désormais gérée globalement par ClassSupervisionSection.
- * - Ajout de la prop excludeIds[] : filtre les adultes déjà affectés (règle R1).
+ * Props :
+ *   value           AdultRef courant
+ *   onChange        (AdultRef) => void
+ *   teachers        { [className]: teacherFullName }
+ *   staff           [{ id, nom, prenom, fonction }]
+ *   fonctionOptions Liste de chaînes pour le select de fonction PPMS
+ *                   (uniquement pour le responsable de zone — vide = pas de select)
+ *   excludeIds      IDs canoniques à exclure (règle R1)
+ *   allowManual     {boolean} default true — si false, supprime la saisie
+ *                   manuelle (contexte ConfigForm où tous les adultes
+ *                   sont issus de l'étape de normalisation)
+ *   error           Message d'erreur
  */
 
 import { toNom, toPrenom, fullName } from "../utils/formatName";
 
-/**
- * @param {object}   value           AdultRef courant
- * @param {function} onChange        (AdultRef) => void
- * @param {object}   teachers        { [className]: teacherFullName }
- * @param {Array}    staff           [{ id, nom, prenom, fonction }]
- * @param {Array}    fonctionOptions Liste de chaînes pour le select de fonction
- * @param {Array}    excludeIds      IDs canoniques à exclure (getAdultId)
- *                                   ex. ["teacher:CP", "staff:s2"]
- * @param {string}   error           Message d'erreur à afficher
- */
 export default function AdultSelector({
     value,
     onChange,
@@ -31,22 +26,24 @@ export default function AdultSelector({
     staff = [],
     fonctionOptions = [],
     excludeIds = [],
+    allowManual = true,
     error,
 }) {
     const staffById = Object.fromEntries(staff.map((s) => [s.id, s]));
 
-    // Valeur courante du <select> principal
+    // ── Valeur du <select> ────────────────────────────────────────
+    // "manual" quand allowManual=true et rien de sélectionné
+    // ""       quand allowManual=false et rien de sélectionné
     const selectValue =
         value.source === "teacher"
             ? `teacher_${value.teacherClass}`
             : value.source === "staff"
               ? `staff_${value.staffId}`
-              : "manual";
+              : allowManual
+                ? "manual"
+                : "";
 
     // ── Filtrage R1 ───────────────────────────────────────────────
-    // On retire les options dont l'id canonique est dans excludeIds,
-    // SAUF la valeur actuellement sélectionnée (pour éviter de vider
-    // un champ déjà renseigné quand on ouvre le select).
     const visibleTeachers = Object.entries(teachers).filter(([cl]) => {
         const id = `teacher:${cl}`;
         return !excludeIds.includes(id) || selectValue === `teacher_${cl}`;
@@ -57,21 +54,21 @@ export default function AdultSelector({
         return !excludeIds.includes(id) || selectValue === `staff_${s.id}`;
     });
 
-    // ── Handlers ──────────────────────────────────────────────────
-
+    // ── Handler ───────────────────────────────────────────────────
     const handleSourceChange = (e) => {
         const val = e.target.value;
-        // Note : `substitute` n'est plus présent dans les AdultRef Sprint 5.
-        // La destructuration est défensive pour les AdultRef migrés qui
-        // pourraient encore avoir ce champ (supprimé à la prochaine modif).
+
         const { substitute: _sub, ...base } = value;
 
-        if (val === "manual") {
+        if (val === "" || val === "manual") {
+            // État vide (allowManual=false) ou saisie manuelle (allowManual=true)
             onChange({
                 ...base,
                 source: "manual",
                 teacherClass: "",
                 staffId: "",
+                nom: "",
+                prenom: "",
             });
         } else if (val.startsWith("teacher_")) {
             onChange({
@@ -91,7 +88,6 @@ export default function AdultSelector({
     };
 
     // ── Dérivés d'affichage ───────────────────────────────────────
-
     const isTeacherSelected =
         value.source === "teacher" && !!value.teacherClass;
     const selectedTeacherName = isTeacherSelected
@@ -101,7 +97,6 @@ export default function AdultSelector({
         value.source === "staff" ? staffById[value.staffId] : null;
 
     // ── Rendu ─────────────────────────────────────────────────────
-
     return (
         <div className="space-y-3">
             {/* ── Sélecteur principal ───────────────────────────── */}
@@ -110,13 +105,14 @@ export default function AdultSelector({
                 onChange={handleSourceChange}
                 className={`w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none
                     focus:ring-2 focus:ring-blue-500 transition-colors
-                    ${
-                        error
-                            ? "border-red-400 bg-red-50"
-                            : "border-gray-300 hover:border-gray-400"
-                    }`}
+                    ${error ? "border-red-400 bg-red-50" : "border-gray-300 hover:border-gray-400"}`}
             >
-                <option value="manual">— Saisir manuellement —</option>
+                {/* Option initiale : manuelle si allowManual, neutre sinon */}
+                {allowManual ? (
+                    <option value="manual">— Saisir manuellement —</option>
+                ) : (
+                    <option value="">— Sélectionner un adulte —</option>
+                )}
 
                 {visibleTeachers.length > 0 && (
                     <optgroup label="Enseignants (depuis le CSV)">
@@ -129,7 +125,7 @@ export default function AdultSelector({
                 )}
 
                 {visibleStaff.length > 0 && (
-                    <optgroup label="Autres personnels saisis">
+                    <optgroup label="Autres personnels">
                         {visibleStaff.map((s) => (
                             <option key={s.id} value={`staff_${s.id}`}>
                                 {fullName(s.nom, s.prenom)}
@@ -146,8 +142,8 @@ export default function AdultSelector({
                 </p>
             )}
 
-            {/* ── Saisie manuelle ───────────────────────────────── */}
-            {value.source === "manual" && (
+            {/* ── Saisie manuelle (allowManual uniquement) ──────── */}
+            {allowManual && value.source === "manual" && (
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pl-3 border-l-2 border-gray-200">
                     <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -230,6 +226,8 @@ export default function AdultSelector({
                             </strong>
                         )}
                     </p>
+                    {/* fonctionOptions uniquement pour les responsables (zone),
+                        pas pour les membres de cellule/zone */}
                     {fonctionOptions.length > 0 && (
                         <div className="w-full sm:w-56 shrink-0">
                             <label className="block text-xs font-medium text-gray-600 mb-1">

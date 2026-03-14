@@ -9,7 +9,7 @@ import ClassSupervisionSection from "./config-form/ClassSupervisionSection";
 import ExtraTeachersSection from "./config-form/ExtraTeachersSection";
 import StaffCardDisplay from "./config-form/StaffCardDisplay";
 import { useConfigForm } from "../hooks/useConfigForm";
-import { emptyAdult, FONCTIONS_ZONE } from "../utils/config/defaults";
+import { emptyAdult } from "../utils/config/defaults";
 import { getAdultId } from "../utils/config/adultId";
 import { getRattachementLabel } from "../utils/config/rattachement";
 
@@ -302,7 +302,7 @@ export default function ConfigForm({
                                     }
                                     teachers={teacherByClass}
                                     staff={config.staff}
-                                    fonctionOptions={FONCTIONS_ZONE}
+                                    allowManual={false}
                                     excludeIds={[...assignedIds].filter(
                                         (id) =>
                                             id !==
