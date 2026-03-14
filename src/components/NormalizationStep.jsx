@@ -1,7 +1,7 @@
 import StepHelp from "./StepHelp";
 import ClassNamesSection from "./normalization/ClassNamesSection";
 import TeacherNamesSection from "./normalization/TeacherNamesSection";
-import ExtraTeachersSection from "./normalization/ExtraTeachersSection";
+import ExtraTeachersSection from "./config-form/ExtraTeachersSection";
 import OtherAdultsSection from "./normalization/OtherAdultsSection";
 import { applyCorrections } from "../utils/normalization";
 

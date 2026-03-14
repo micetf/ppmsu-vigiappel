@@ -1,3 +1,20 @@
+/**
+ * docxGenerator.js
+ * ────────────────
+ * Génère les fichiers .docx PPMS en mémoire.
+ * Signature publique inchangée : generateAll(config, csvData)
+ *
+ * Évolution Sprint 5 :
+ * - getCrisisCell()            : config.crisis.responsible + crisis.members
+ * - makeCrisisCellAdultsChildren() : idem
+ * - getClassSubstitute()       : config.classSupervision[cl] + resolveAdult()
+ *                                resolveSubstitute() supprimé (absorbé)
+ * - makeGlobalSummaryChildren(): totalAdultsTheo sans filtre "cellule"
+ * - makeOptionAChildren()      : classSupervision remplace classOverrides
+ * - makeZoneSummaryChildren()  : idem
+ * - makeClassChildren()        : teacherSplitByClass passé à getClassSubstitute
+ */
+
 import {
     Document,
     Packer,
@@ -14,8 +31,9 @@ import {
     SectionType,
 } from "docx";
 import { fullName } from "./formatName";
+import { getVacancyReason } from "./config/vacancies";
 
-// ── Constantes ─────────────────────────────────────────────────────
+// ── Constantes ─────────────────────────────────────────────────────────────
 const FONT = "Arial";
 const BOX = "☐";
 const BORDER = { style: BorderStyle.SINGLE, size: 4, color: "000000" };
@@ -36,15 +54,15 @@ const SHADE_ADULT = {
     fill: "DBEAFE",
     color: "DBEAFE",
 };
-const PAGE_MARGIN = { top: 1134, bottom: 1134, left: 1134, right: 1134 };
-const TABLE_W = 9400;
 const SHADE_MUTED = {
     type: ShadingType.SOLID,
     fill: "F0F0F0",
     color: "F0F0F0",
 };
+const PAGE_MARGIN = { top: 1134, bottom: 1134, left: 1134, right: 1134 };
+const TABLE_W = 9400;
 
-// ── Helpers ────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────
 export const slug = (str) =>
     String(str ?? "")
         .normalize("NFD")
@@ -53,27 +71,28 @@ export const slug = (str) =>
         .replace(/_+/g, "_")
         .slice(0, 40);
 
-// ← MODIFIÉ : ajout teacherSplitByClass pour séparer nom/prénom des enseignants
+// ── Résolution cellule de crise ────────────────────────────────────────────
+// MODIFIÉ Sprint 5 : config.crisis.responsible + crisis.members
 const getCrisisCell = (
     config,
     teacherByClass = {},
     staffById = {},
     teacherSplitByClass = {}
 ) => {
+    const responsible = config.crisis?.responsible;
     const adult = resolveAdult(
-        config.crisisCell,
+        responsible,
         teacherByClass,
         staffById,
         teacherSplitByClass
     );
     if (!adult) return "Non défini";
-    const extra =
-        config.staff?.filter((s) => s.rattachement === "cellule") ?? [];
+    const members = config.crisis?.members ?? [];
     const base =
         fullName(adult.nom, adult.prenom) +
-        (config.crisisCell.fonction ? ` (${config.crisisCell.fonction})` : "");
-    return extra.length > 0
-        ? `${base} + ${extra.length} autre${extra.length > 1 ? "s" : ""}`
+        (responsible?.fonction ? ` (${responsible.fonction})` : "");
+    return members.length > 0
+        ? `${base} + ${members.length} autre${members.length > 1 ? "s" : ""}`
         : base;
 };
 
@@ -83,7 +102,7 @@ const getClassStaff = (config, classe) =>
 const getZoneStaff = (config, zoneId) =>
     config.staff.filter((s) => s.rattachement === zoneId);
 
-// ── Helpers typographie ────────────────────────────────────────────
+// ── Helpers typographie ────────────────────────────────────────────────────
 const run = (text, opts = {}) =>
     new TextRun({
         text: String(text ?? ""),
@@ -101,7 +120,7 @@ const sectionTitle = (text) =>
         spacing: { before: 300, after: 100 },
     });
 
-// ── Helpers tableau ────────────────────────────────────────────────
+// ── Helpers tableau ────────────────────────────────────────────────────────
 function cell(
     text,
     {
@@ -166,9 +185,7 @@ const makeSection = (children, isLast = false) => ({
     children,
 });
 
-// ── Helpers de résolution ──────────────────────────────────────────
-
-// ← MODIFIÉ : ajout teacherSplitByClass pour séparer nom/prénom quand source = "teacher"
+// ── Helpers de résolution ──────────────────────────────────────────────────
 function resolveAdult(
     adultConfig,
     teacherByClass,
@@ -196,7 +213,7 @@ function resolveAdult(
             fonction: adultConfig.fonction || s.fonction || "",
         };
     }
-    // manual
+    // manual ou extra
     if (!adultConfig.nom?.trim()) return null;
     return {
         nom: adultConfig.nom,
@@ -205,26 +222,9 @@ function resolveAdult(
     };
 }
 
-function resolveSubstitute(substitute, staffById) {
-    if (!substitute) return null;
-    if (substitute.source === "staff") {
-        const s = staffById[substitute.staffId];
-        if (!s) return null;
-        return {
-            nom: s.nom,
-            prenom: s.prenom,
-            fonction: substitute.fonction || s.fonction || "",
-        };
-    }
-    if (!substitute.nom?.trim()) return null;
-    return {
-        nom: substitute.nom,
-        prenom: substitute.prenom || "",
-        fonction: substitute.fonction || "",
-    };
-}
+// resolveSubstitute() supprimé Sprint 5 — remplacé par resolveAdult()
+// Les substituts sont désormais des AdultRef standard dans classSupervision.
 
-// ← MODIFIÉ : ajout teacherSplitByClass, passé à resolveAdult
 function getZoneResponsibleName(
     zone,
     config,
@@ -242,32 +242,34 @@ function getZoneResponsibleName(
     return adult ? fullName(adult.nom, adult.prenom) : "Non défini";
 }
 
-function getClassSubstitute(classe, config, teacherByClass, staffById) {
-    const cc = config.crisisCell;
-    if (cc?.source === "teacher" && cc?.teacherClass === classe) {
-        return {
-            mission: cc.fonction || "Cellule de crise",
-            teacherNom: teacherByClass[classe] || "",
-            sub: resolveSubstitute(cc.substitute, staffById),
-        };
-    }
-    for (const [zoneId, resp] of Object.entries(
-        config.zoneResponsibles || {}
-    )) {
-        if (resp?.source === "teacher" && resp?.teacherClass === classe) {
-            const zone = config.zones.find((z) => z.id === zoneId);
-            return {
-                mission:
-                    resp.fonction || `Responsable zone ${zone?.name || ""}`,
-                teacherNom: teacherByClass[classe] || "",
-                sub: resolveSubstitute(resp.substitute, staffById),
-            };
-        }
-    }
-    return null;
+// MODIFIÉ Sprint 5 : lit classSupervision au lieu de crisisCell.substitute
+// et zoneResponsibles[x].substitute. resolveAdult() remplace resolveSubstitute().
+function getClassSubstitute(
+    classe,
+    config,
+    teacherByClass,
+    staffById,
+    teacherSplitByClass = {}
+) {
+    const supervision = config.classSupervision?.[classe];
+    if (!supervision) return null;
+
+    const reason = getVacancyReason(classe, config) || "Mission PPMS";
+    const sub = resolveAdult(
+        supervision,
+        teacherByClass,
+        staffById,
+        teacherSplitByClass
+    );
+
+    return {
+        mission: reason,
+        teacherNom: teacherByClass[classe] || "",
+        sub,
+    };
 }
 
-// ── En-tête et pied ────────────────────────────────────────────────
+// ── En-tête et pied ────────────────────────────────────────────────────────
 function makeDocHeader(schoolName, title, lines = []) {
     return [
         para(
@@ -340,9 +342,7 @@ const makeDateLine = () =>
         }
     );
 
-// ── Constructeurs de contenu ───────────────────────────────────────
-
-// ← MODIFIÉ : ajout teacherSplitByClass, passé à getZoneResponsibleName et resolveAdult
+// ── Constructeurs de contenu ───────────────────────────────────────────────
 function makeAdultsChildren(
     zone,
     zoneStaff,
@@ -443,8 +443,7 @@ function makeAdultsChildren(
     ];
 }
 
-// ← MODIFIÉ : ajout teacherSplit (split {nom,prenom} de l'enseignant de cette classe)
-// et teacherSplitByClass pour getZoneResponsibleName
+// MODIFIÉ Sprint 5 : teacherSplitByClass passé à getClassSubstitute
 function makeClassChildren(
     classe,
     students,
@@ -473,7 +472,8 @@ function makeClassChildren(
         classe,
         config,
         teacherByClass,
-        staffById
+        staffById,
+        teacherSplitByClass // ← ajout Sprint 5
     );
     const extras = (config?.classExtraTeachers?.[classe] || []).filter((et) =>
         et.nom.trim()
@@ -482,7 +482,6 @@ function makeClassChildren(
     const allAdults = [];
 
     if (teacher) {
-        // ← MODIFIÉ : utilise teacherSplit.nom / teacherSplit.prenom si disponible
         const teacherNom = teacherSplit?.nom ?? teacher;
         const teacherPrenom = teacherSplit?.prenom ?? "";
 
@@ -590,217 +589,7 @@ function makeClassChildren(
     ];
 }
 
-// ← MODIFIÉ : ajout teacherSplitByClass, utilisé pour nom/prenom des enseignants
-function makeOptionAChildren(
-    config,
-    byClass,
-    classes,
-    teacherByClass,
-    teacherSplitByClass = {}
-) {
-    const zone = config.zones[0];
-    const crisisCell = getCrisisCell(config);
-    const staffById = Object.fromEntries(config.staff.map((s) => [s.id, s]));
-
-    const allAdults = [];
-
-    if (zone.responsibleNom?.trim()) {
-        allAdults.push({
-            nom: zone.responsibleNom,
-            prenom: zone.responsiblePrenom || "",
-            fonction: "Responsable de zone",
-            muted: false,
-        });
-    }
-
-    classes.forEach((cl) => {
-        const teacher = teacherByClass[cl];
-        // ← MODIFIÉ : lecture du split normalisé
-        const split = teacherSplitByClass[cl];
-        const override = config.classOverrides?.[cl];
-        const extras = (config.classExtraTeachers?.[cl] || []).filter((et) =>
-            et.nom.trim()
-        );
-
-        if (teacher) {
-            if (override?.teacherUnavailable) {
-                allAdults.push({
-                    nom: split?.nom ?? teacher,
-                    prenom: split?.prenom ?? "",
-                    fonction: `Absent(e) du groupe ${cl} — mission PPMS`,
-                    muted: true,
-                });
-                let sub = null;
-                if (
-                    override.substituteSource === "staff" &&
-                    override.substituteStaffId
-                ) {
-                    const s = staffById[override.substituteStaffId];
-                    if (s)
-                        sub = {
-                            nom: s.nom,
-                            prenom: s.prenom,
-                            fonction: `${s.fonction || ""} — encadrant(e) ${cl}`,
-                        };
-                } else if (
-                    override.substituteSource === "manual" &&
-                    override.substituteNom?.trim()
-                ) {
-                    sub = {
-                        nom: override.substituteNom,
-                        prenom: override.substitutePrenom || "",
-                        fonction: `${override.substituteFonction || ""} — encadrant(e) ${cl}`,
-                    };
-                }
-                if (sub) allAdults.push({ ...sub, muted: false });
-            } else {
-                allAdults.push({
-                    nom: split?.nom ?? teacher, // ← MODIFIÉ
-                    prenom: split?.prenom ?? "", // ← MODIFIÉ
-                    fonction: `Enseignant(e) — ${cl}`,
-                    muted: false,
-                });
-            }
-        }
-
-        extras.forEach((et) =>
-            allAdults.push({
-                nom: et.nom,
-                prenom: et.prenom || "",
-                fonction: `${et.fonction || "Décharge"} — ${cl}`,
-                muted: false,
-            })
-        );
-    });
-
-    config.staff
-        .filter((s) => s.rattachement !== "cellule")
-        .forEach((s) =>
-            allAdults.push({
-                nom: s.nom,
-                prenom: s.prenom,
-                fonction: s.fonction || "",
-                muted: false,
-            })
-        );
-
-    const activeAdults = allAdults.filter((a) => !a.muted);
-
-    const WA = [2000, 1600, 2800, 700, 700, 700, 700];
-    const COLS_A = [
-        "NOM",
-        "PRÉNOM",
-        "FONCTION",
-        "PRÉSENT",
-        "ABSENT",
-        "MANQUANT",
-        "BLESSÉ",
-    ];
-
-    const adultRows = allAdults.map((a) =>
-        tableRow([
-            cell(a.nom, { adult: !a.muted, muted: a.muted, w: WA[0] }),
-            cell(a.prenom, { adult: !a.muted, muted: a.muted, w: WA[1] }),
-            cell(a.fonction, { adult: !a.muted, muted: a.muted, w: WA[2] }),
-            ...(a.muted
-                ? WA.slice(3).map((w) =>
-                      cell("—", { muted: true, center: true, w })
-                  )
-                : WA.slice(3).map((w) =>
-                      cell(BOX, { adult: true, center: true, w })
-                  )),
-        ])
-    );
-
-    const blankRows = Array.from(
-        { length: config.blankIntervenantRows },
-        (_, i) => {
-            const alt = (allAdults.length + i) % 2 !== 0;
-            return tableRow([
-                cell("", { alt, w: WA[0] }),
-                cell("", { alt, w: WA[1] }),
-                cell("", { alt, w: WA[2] }),
-                ...WA.slice(3).map((w) => cell(BOX, { alt, center: true, w })),
-            ]);
-        }
-    );
-
-    const W = [2000, 1600, 1400, 1100, 1100, 1100, 1100];
-    const COLS_S = [
-        "NOM",
-        "PRÉNOM",
-        "CLASSE",
-        "PRÉSENT",
-        "ABSENT",
-        "MANQUANT",
-        "BLESSÉ",
-    ];
-    const totalStudents = classes.reduce(
-        (s, cl) => s + (byClass[cl]?.length ?? 0),
-        0
-    );
-
-    const studentRows = classes.flatMap((cl, ci) =>
-        (byClass[cl] || []).map((s, si) => {
-            const alt = (ci + si) % 2 !== 0;
-            return tableRow([
-                cell(s["Nom"] || "", { alt, w: W[0] }),
-                cell(s["Prénom"] || "", { alt, w: W[1] }),
-                cell(cl, { alt, w: W[2] }),
-                cell(BOX, { alt, center: true, w: W[3] }),
-                cell(BOX, { alt, center: true, w: W[4] }),
-                cell(BOX, { alt, center: true, w: W[5] }),
-                cell(BOX, { alt, center: true, w: W[6] }),
-            ]);
-        })
-    );
-
-    return [
-        ...makeDocHeader(config.schoolName, "FICHE DE RECENSEMENT", [
-            `Zone : ${zone.name}   |   Responsable : ${fullName(zone.responsibleNom, zone.responsiblePrenom)}`,
-            `Cellule de crise : ${crisisCell}`,
-        ]),
-        sectionTitle(
-            `Adultes (${activeAdults.length} permanent${activeAdults.length > 1 ? "s" : ""}` +
-                (config.blankIntervenantRows > 0
-                    ? ` + ${config.blankIntervenantRows} lignes variables)`
-                    : ")")
-        ),
-        makeTable([
-            tableRow(
-                COLS_A.map((c, i) =>
-                    cell(c, { header: true, center: i >= 3, w: WA[i] })
-                ),
-                { isHeader: true }
-            ),
-            ...adultRows,
-            ...(config.blankIntervenantRows > 0
-                ? [
-                      tableRow([
-                          cell(
-                              "← Intervenants / personnels variables — à compléter",
-                              { w: TABLE_W }
-                          ),
-                      ]),
-                      ...blankRows,
-                  ]
-                : []),
-        ]),
-        sectionTitle(`Élèves (${totalStudents})`),
-        makeTable([
-            tableRow(
-                COLS_S.map((c, i) =>
-                    cell(c, { header: true, center: i >= 3, w: W[i] })
-                ),
-                { isHeader: true }
-            ),
-            ...studentRows,
-        ]),
-        ...makeFooter(totalStudents, activeAdults.length),
-    ];
-}
-
-// ── makeZoneSummaryChildren — inchangé ─────────────────────────────
+// MODIFIÉ Sprint 5 : classOverrides → classSupervision
 function makeZoneSummaryChildren(
     zone,
     classesInZone,
@@ -828,21 +617,24 @@ function makeZoneSummaryChildren(
     const zoneStaff = config ? getZoneStaff(config, zone.id) : [];
     const hasResponsible = !!zone.responsibleNom?.trim();
     const permanentAdults = (hasResponsible ? 1 : 0) + zoneStaff.length;
+
+    // MODIFIÉ : classSupervision remplace classOverrides pour détecter les absences
     const activeTeachers = classesInZone.filter((cl) => {
         if (!teacherByClass[cl]) return false;
-        const override = config?.classOverrides?.[cl];
-        return !override?.teacherUnavailable;
+        return !config?.classSupervision?.[cl]; // vacance = enseignant absent de la classe
     }).length;
     const totalPermanentAdults = permanentAdults + activeTeachers;
 
     const classRows = classesInZone.map((cl, i) => {
-        const override = config?.classOverrides?.[cl];
-        const isOverridden = !!override?.teacherUnavailable;
+        // MODIFIÉ : classSupervision remplace classOverrides
+        const isOverridden = !!config?.classSupervision?.[cl];
         const extras = (config?.classExtraTeachers?.[cl] || []).filter((et) =>
             et.nom.trim()
         );
         const teacher = teacherByClass[cl] || "";
-        const teacherDisplay = isOverridden ? `(${teacher} — absent)` : teacher;
+        const teacherDisplay = isOverridden
+            ? `(${teacher} — mission PPMS)`
+            : teacher;
         const extrasNote =
             extras.length > 0
                 ? ` + ${extras.map((et) => et.nom).join(", ")}`
@@ -892,7 +684,9 @@ function makeZoneSummaryChildren(
     ];
 }
 
-// ← MODIFIÉ : ajout teacherSplitByClass, passé à getCrisisCell et makeCrisisCellAdultsChildren
+// MODIFIÉ Sprint 5 :
+// - totalAdultsTheo : plus de filtre "cellule" (membres cellule hors staff[])
+// - makeRowCells : teacherSplitByClass passé à getClassSubstitute
 function makeGlobalSummaryChildren(
     config,
     byClass,
@@ -907,9 +701,10 @@ function makeGlobalSummaryChildren(
         (s, cl) => s + (byClass[cl]?.length ?? 0),
         0
     );
+
+    // MODIFIÉ : config.staff.length sans filtre — plus de staff[].rattachement === "cellule"
     const totalAdultsTheo =
-        classes.filter((cl) => teacherByClass[cl]).length +
-        config.staff.filter((s) => s.rattachement !== "cellule").length;
+        classes.filter((cl) => teacherByClass[cl]).length + config.staff.length;
 
     const W = multiZone
         ? [1000, 1400, 2200, 1000, 950, 950, 950, 950]
@@ -940,11 +735,13 @@ function makeGlobalSummaryChildren(
         const zoneObj = multiZone
             ? zones.find((z) => z.id === classZoneMap[cl]) || zones[0]
             : zones[0];
+        // MODIFIÉ : teacherSplitByClass passé à getClassSubstitute
         const override = getClassSubstitute(
             cl,
             config,
             teacherByClass,
-            staffById
+            staffById,
+            teacherSplitByClass
         );
         const teacherDisplay = teacherByClass[cl]
             ? override
@@ -1030,15 +827,14 @@ function makeGlobalSummaryChildren(
                     { size: 16, italics: true, color: "666666" }
                 ),
             ],
-            {
-                spacing: { before: 120 },
-            }
+            { spacing: { before: 120 } }
         ),
         makeDateLine(),
     ];
 }
 
-// ← MODIFIÉ : ajout teacherSplitByClass, passé à resolveAdult
+// MODIFIÉ Sprint 5 : config.crisis.responsible + crisis.members
+// resolveSubstitute remplacé par resolveAdult
 function makeCrisisCellAdultsChildren(
     config,
     teacherByClass,
@@ -1056,28 +852,47 @@ function makeCrisisCellAdultsChildren(
         "BLESSÉ",
     ];
 
+    const responsible = config.crisis?.responsible;
+    const members = config.crisis?.members ?? [];
+
     const ccAdult = resolveAdult(
-        config.crisisCell,
+        responsible,
         teacherByClass,
         staffById,
         teacherSplitByClass
     );
+
     const crisisStaff = [
+        // Responsable principal
         ...(ccAdult
             ? [
                   {
                       ...ccAdult,
-                      fonction: config.crisisCell.fonction || "Directeur/trice",
+                      fonction: responsible?.fonction || "Directeur/trice",
                   },
               ]
             : []),
-        ...config.staff
-            .filter((s) => s.rattachement === "cellule")
-            .map((s) => ({
-                nom: s.nom,
-                prenom: s.prenom,
-                fonction: s.fonction || "",
-            })),
+        // Membres supplémentaires — chacun est un AdultRef standard
+        ...members
+            .map((m) => {
+                const resolved = resolveAdult(
+                    m,
+                    teacherByClass,
+                    staffById,
+                    teacherSplitByClass
+                );
+                if (!resolved) return null;
+                // Récupère la fonction depuis staff[] si source === "staff"
+                const fonctionStaff =
+                    m.source === "staff"
+                        ? staffById[m.staffId]?.fonction
+                        : null;
+                return {
+                    ...resolved,
+                    fonction: fonctionStaff || resolved.fonction || "",
+                };
+            })
+            .filter(Boolean),
     ].filter((a) => a.nom.trim());
 
     const rows = crisisStaff.map((a) =>
@@ -1112,17 +927,228 @@ function makeCrisisCellAdultsChildren(
                     { size: 18, bold: true, color: "1E3A5F" }
                 ),
             ],
-            {
-                spacing: { before: 200, after: 80 },
-            }
+            { spacing: { before: 200, after: 80 } }
         ),
         makeDateLine(),
     ];
 }
 
-// ── Builders de documents ──────────────────────────────────────────
+// MODIFIÉ Sprint 5 :
+// - classSupervision remplace classOverrides pour détecter l'absence + résoudre le substitut
+// - config.staff sans filtre "cellule"
+function makeOptionAChildren(
+    config,
+    byClass,
+    classes,
+    teacherByClass,
+    teacherSplitByClass = {}
+) {
+    const zone = config.zones[0];
+    const crisisCell = getCrisisCell(
+        config,
+        teacherByClass,
+        {},
+        teacherSplitByClass
+    );
+    const staffById = Object.fromEntries(config.staff.map((s) => [s.id, s]));
 
-// ← MODIFIÉ : ajout teacherSplitByClass, passé à makeAdultsChildren et makeClassChildren
+    const allAdults = [];
+
+    // Responsable de zone (Option A = une seule zone)
+    const zoneResp = config.zoneResponsibles?.[zone.id];
+    const zoneResponsible = resolveAdult(
+        zoneResp,
+        teacherByClass,
+        staffById,
+        teacherSplitByClass
+    );
+    if (zoneResponsible) {
+        allAdults.push({
+            ...zoneResponsible,
+            fonction: zoneResp?.fonction || "Responsable de zone",
+            muted: false,
+        });
+    }
+
+    classes.forEach((cl) => {
+        const teacher = teacherByClass[cl];
+        const split = teacherSplitByClass[cl];
+        // MODIFIÉ : classSupervision remplace classOverrides
+        const supervision = config.classSupervision?.[cl];
+        const extras = (config.classExtraTeachers?.[cl] || []).filter((et) =>
+            et.nom.trim()
+        );
+
+        if (teacher) {
+            if (supervision) {
+                // Enseignant en mission PPMS — ligne barrée
+                allAdults.push({
+                    nom: split?.nom ?? teacher,
+                    prenom: split?.prenom ?? "",
+                    fonction: `${getVacancyReason(cl, config) || "Mission PPMS"} — Classe ${cl}`,
+                    muted: true,
+                });
+                // Substitut depuis classSupervision
+                const sub = resolveAdult(
+                    supervision,
+                    teacherByClass,
+                    staffById,
+                    teacherSplitByClass
+                );
+                if (sub) {
+                    allAdults.push({
+                        ...sub,
+                        fonction: `${sub.fonction || ""}${sub.fonction ? " — " : ""}encadrant(e) ${cl}`,
+                        muted: false,
+                    });
+                }
+            } else {
+                allAdults.push({
+                    nom: split?.nom ?? teacher,
+                    prenom: split?.prenom ?? "",
+                    fonction: `Enseignant(e) — ${cl}`,
+                    muted: false,
+                });
+            }
+        }
+
+        extras.forEach((et) =>
+            allAdults.push({
+                nom: et.nom,
+                prenom: et.prenom || "",
+                fonction: `${et.fonction || "Décharge"} — ${cl}`,
+                muted: false,
+            })
+        );
+    });
+
+    // MODIFIÉ : config.staff sans filtre "cellule" (membres cellule dans crisis.members)
+    config.staff.forEach((s) =>
+        allAdults.push({
+            nom: s.nom,
+            prenom: s.prenom,
+            fonction: s.fonction || "",
+            muted: false,
+        })
+    );
+
+    const activeAdults = allAdults.filter((a) => !a.muted);
+
+    const WA = [2000, 1600, 2800, 700, 700, 700, 700];
+    const COLS_A = [
+        "NOM",
+        "PRÉNOM",
+        "FONCTION",
+        "PRÉSENT",
+        "ABSENT",
+        "MANQUANT",
+        "BLESSÉ",
+    ];
+
+    const adultRows = allAdults.map((a) =>
+        tableRow([
+            cell(a.nom, { adult: !a.muted, muted: a.muted, w: WA[0] }),
+            cell(a.prenom, { adult: !a.muted, muted: a.muted, w: WA[1] }),
+            cell(a.fonction, { adult: !a.muted, muted: a.muted, w: WA[2] }),
+            ...(a.muted
+                ? WA.slice(3).map((w) =>
+                      cell("—", { muted: true, center: true, w })
+                  )
+                : WA.slice(3).map((w) =>
+                      cell(BOX, { adult: true, center: true, w })
+                  )),
+        ])
+    );
+
+    const W = [2000, 1600, 1400, 1100, 1100, 1100, 1100];
+    const COLS_S = [
+        "NOM",
+        "PRÉNOM",
+        "CLASSE",
+        "PRÉSENT",
+        "ABSENT",
+        "MANQUANT",
+        "BLESSÉ",
+    ];
+    const totalStudents = classes.reduce(
+        (s, cl) => s + (byClass[cl]?.length ?? 0),
+        0
+    );
+
+    const studentRows = classes.flatMap((cl, ci) =>
+        (byClass[cl] || []).map((s, si) => {
+            const alt = (ci + si) % 2 !== 0;
+            return tableRow([
+                cell(s["Nom"] || "", { alt, w: W[0] }),
+                cell(s["Prénom"] || "", { alt, w: W[1] }),
+                cell(cl, { alt, w: W[2] }),
+                cell(BOX, { alt, center: true, w: W[3] }),
+                cell(BOX, { alt, center: true, w: W[4] }),
+                cell(BOX, { alt, center: true, w: W[5] }),
+                cell(BOX, { alt, center: true, w: W[6] }),
+            ]);
+        })
+    );
+
+    const blankRows = Array.from(
+        { length: config.blankIntervenantRows },
+        (_, i) => {
+            const alt = (allAdults.length + i) % 2 !== 0;
+            return tableRow([
+                cell("", { alt, w: WA[0] }),
+                cell("", { alt, w: WA[1] }),
+                cell("", { alt, w: WA[2] }),
+                ...WA.slice(3).map((w) => cell(BOX, { alt, center: true, w })),
+            ]);
+        }
+    );
+
+    return [
+        ...makeDocHeader(config.schoolName, "FICHE DE RECENSEMENT", [
+            `Zone : ${zone.name}   |   Responsable : ${fullName(zoneResponsible?.nom ?? "", zoneResponsible?.prenom ?? "")}`,
+            `Cellule de crise : ${crisisCell}`,
+        ]),
+        sectionTitle(
+            `Adultes (${activeAdults.length} permanent${activeAdults.length > 1 ? "s" : ""}` +
+                (config.blankIntervenantRows > 0
+                    ? ` + ${config.blankIntervenantRows} lignes variables)`
+                    : ")")
+        ),
+        makeTable([
+            tableRow(
+                COLS_A.map((c, i) =>
+                    cell(c, { header: true, center: i >= 3, w: WA[i] })
+                ),
+                { isHeader: true }
+            ),
+            ...adultRows,
+            ...(config.blankIntervenantRows > 0
+                ? [
+                      tableRow([
+                          cell(
+                              "← Intervenants / personnels variables — à compléter",
+                              { w: TABLE_W }
+                          ),
+                      ]),
+                      ...blankRows,
+                  ]
+                : []),
+        ]),
+        sectionTitle(`Élèves (${totalStudents})`),
+        makeTable([
+            tableRow(
+                COLS_S.map((c, i) =>
+                    cell(c, { header: true, center: i >= 3, w: W[i] })
+                ),
+                { isHeader: true }
+            ),
+            ...studentRows,
+        ]),
+        ...makeFooter(totalStudents, activeAdults.length),
+    ];
+}
+
+// ── Builders de documents ──────────────────────────────────────────────────
 function buildZoneDocument(
     zone,
     config,
@@ -1148,7 +1174,7 @@ function buildZoneDocument(
                 cl,
                 byClass[cl] || [],
                 teacherByClass[cl] || "",
-                teacherSplitByClass[cl], // ← MODIFIÉ : split passé individuellement
+                teacherSplitByClass[cl],
                 getClassStaff(config, cl),
                 zone,
                 config.schoolName,
@@ -1166,7 +1192,6 @@ function buildZoneDocument(
     });
 }
 
-// ← MODIFIÉ : ajout teacherSplitByClass, passé à makeGlobalSummaryChildren
 function buildCrisisDocument(
     config,
     byClass,
@@ -1209,9 +1234,9 @@ function buildCrisisDocument(
     });
 }
 
-// ── Point d'entrée ─────────────────────────────────────────────────
+// ── Point d'entrée ─────────────────────────────────────────────────────────
+// Signature inchangée — contrat public garanti.
 export async function generateAll(config, csvData) {
-    // ← MODIFIÉ : destructure teacherSplitByClass avec fallback {}
     const {
         byClass,
         classes,
