@@ -1,5 +1,12 @@
 // src/components/StepIndicator.jsx — version navigable
-const STEPS = ["Import CSV", "Aperçu", "Configuration", "Export DOCX"];
+// StepIndicator.jsx — adapter le tableau des labels
+const STEPS = [
+    { n: 1, label: "Import" },
+    { n: 2, label: "Aperçu" },
+    { n: 3, label: "Adultes" }, // ← nouveau
+    { n: 4, label: "Config." },
+    { n: 5, label: "Fiches" },
+];
 
 export default function StepIndicator({ current, onGoTo }) {
     return (
