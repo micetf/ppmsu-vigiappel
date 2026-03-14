@@ -1,19 +1,3 @@
-/**
- * ConfigForm.jsx
- * ──────────────
- * Étape de configuration PPMS (étape 4 dans le workflow).
- *
- * Évolution Sprint 5 :
- * - Section cellule de crise : remplacée par <CrisisCellSection>
- *   (responsable + membres, badges vacance, R1 via excludeIds)
- * - Section supervision : <ClassSupervisionSection> conditionnelle
- *   (affichée dès qu'une vacance existe, R4 bloquant)
- * - Responsables de zone : showSubstitute supprimé d'AdultSelector
- *   (la supervision est centralisée dans ClassSupervisionSection)
- * - Bouton "Générer" désactivé si des erreurs sont présentes
- * - Suppression de tous les marqueurs COMPAT (crisisCell, substitute)
- */
-
 import { useState } from "react";
 import StepHelp from "./StepHelp";
 import Section from "./ui/Section";
@@ -23,15 +7,11 @@ import AdultSelector from "./AdultSelector";
 import CrisisCellSection from "./config-form/CrisisCellSection";
 import ClassSupervisionSection from "./config-form/ClassSupervisionSection";
 import ExtraTeachersSection from "./config-form/ExtraTeachersSection";
-import StaffCardEditing from "./config-form/StaffCardEditing";
 import StaffCardDisplay from "./config-form/StaffCardDisplay";
 import { useConfigForm } from "../hooks/useConfigForm";
 import { emptyAdult, FONCTIONS_ZONE } from "../utils/config/defaults";
 import { getAdultId } from "../utils/config/adultId";
-import {
-    getRattachementLabel,
-    buildRattachementOptions,
-} from "../utils/config/rattachement";
+import { getRattachementLabel } from "../utils/config/rattachement";
 
 export default function ConfigForm({
     classes,
@@ -42,15 +22,12 @@ export default function ConfigForm({
 }) {
     const form = useConfigForm(classes, initialConfig);
     const [showFormatOptions, setShowFormatOptions] = useState(false);
-    const [editingStaffIds, setEditingStaffIds] = useState(new Set());
 
     const { config, errors, isRestored, reset, vacancies, assignedIds } = form;
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        const { valid, staffInError } = form.submit(onSubmit);
-        if (!valid && staffInError.length)
-            setEditingStaffIds((prev) => new Set([...prev, ...staffInError]));
+        form.submit(onSubmit);
     };
 
     // ── Dérivés ────────────────────────────────────────────────────────────
@@ -63,8 +40,6 @@ export default function ConfigForm({
         (acc, arr) => acc + (arr?.filter((et) => et.nom.trim()).length || 0),
         0
     );
-
-    const rattachementOptions = buildRattachementOptions(config.zones, classes);
 
     const summaryParts = [
         config.schoolName || "École non définie",
@@ -104,7 +79,34 @@ export default function ConfigForm({
                 </div>
             )}
 
-            <StepHelp step={4} />
+            {/* ── Aide contextuelle ───────────────────────────────────── */}
+            <StepHelp
+                stepKey="step_config"
+                title="Comment configurer votre PPMS ?"
+            >
+                <div className="pt-3 space-y-2 text-sm">
+                    <p>
+                        <strong>1. Cellule de crise</strong> — Désigner le/la
+                        directeur/trice (ou faisant fonction) qui coordonne la
+                        gestion de l'événement depuis le poste de commandement.
+                    </p>
+                    <p>
+                        <strong>2. Zones de mise en sûreté</strong> — Nommer
+                        chaque espace de confinement (gymnase, salle
+                        polyvalente, couloir…) et désigner son responsable.
+                    </p>
+                    <p>
+                        <strong>3. Supervision des classes</strong> — Si un(e)
+                        enseignant(e) est désigné(e) à un rôle PPMS, sa classe
+                        doit être confiée à un autre adulte. Cette section
+                        apparaît automatiquement si nécessaire.
+                    </p>
+                    <p className="text-blue-700">
+                        💡 Le bouton « Générer » s'active dès que toutes les
+                        informations obligatoires sont renseignées.
+                    </p>
+                </div>
+            </StepHelp>
 
             {/* ── 1. École ────────────────────────────────────────────── */}
             <Section title="École">
@@ -231,6 +233,7 @@ export default function ConfigForm({
                     teachers={teacherByClass}
                     staff={config.staff}
                     assignedIds={assignedIds}
+                    classSupervision={config.classSupervision ?? {}}
                     errors={errors}
                 />
             </Section>
@@ -279,18 +282,16 @@ export default function ConfigForm({
                             </Field>
 
                             <div className="bg-white border border-gray-200 rounded-lg p-3 space-y-2">
-                                <div>
-                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                                        Responsable de zone
-                                    </p>
-                                    <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">
-                                        Centralise les fiches et les remonte à
-                                        la cellule de crise.
-                                        {multiZone
-                                            ? " Doit être différent du/de la directeur/trice."
-                                            : ""}
-                                    </p>
-                                </div>
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                    Responsable de zone
+                                </p>
+                                <p className="text-xs text-gray-400 leading-relaxed">
+                                    Centralise les fiches et les remonte à la
+                                    cellule de crise.
+                                    {multiZone
+                                        ? " Doit être différent du/de la responsable cellule."
+                                        : ""}
+                                </p>
                                 <AdultSelector
                                     value={
                                         config.zoneResponsibles?.[zone.id] ||
@@ -329,8 +330,8 @@ export default function ConfigForm({
                         une zone
                     </button>
                     <p className="text-xs text-gray-400 pl-6">
-                        Uniquement si votre école comporte plusieurs bâtiments
-                        ou espaces de confinement séparés.
+                        Uniquement si votre école comporte plusieurs espaces de
+                        confinement séparés.
                     </p>
                 </div>
             </Section>
@@ -401,69 +402,48 @@ export default function ConfigForm({
                 />
             </Section>
 
-            {/* ── 8. Autres adultes ───────────────────────────────────── */}
+            {/* ── 8. Autres adultes — lecture seule ───────────────────── */}
             <Section title="Autres adultes">
                 <p className="text-sm text-gray-500">
-                    AESH, ATSEM, entretien, service civique… Ils peuvent être
-                    désignés comme superviseurs de classe ou responsables de
-                    zone.
+                    AESH, ATSEM, entretien, service civique… déclarés à l'étape
+                    précédente. Ces adultes sont disponibles comme responsables
+                    de zone ou superviseurs de classe.
                 </p>
-                {config.staff.length > 0 && (
-                    <div className="space-y-2 mt-1">
-                        {config.staff.map((s) =>
-                            editingStaffIds.has(s.id) ? (
-                                <StaffCardEditing
-                                    key={s.id}
-                                    staff={s}
-                                    onUpdate={(field, value) =>
-                                        form.updateStaff(s.id, field, value)
-                                    }
-                                    onValidate={() =>
-                                        setEditingStaffIds((prev) => {
-                                            const n = new Set(prev);
-                                            n.delete(s.id);
-                                            return n;
-                                        })
-                                    }
-                                    onRemove={() => form.removeStaff(s.id)}
-                                    rattachementOptions={rattachementOptions}
-                                    errors={errors}
-                                />
-                            ) : (
-                                <StaffCardDisplay
-                                    key={s.id}
-                                    staff={s}
-                                    rattachementLabel={getRattachementLabel(
-                                        s.rattachement,
-                                        config.zones
-                                    )}
-                                    hasError={
-                                        !!errors[`staff_${s.id}_nom`] ||
-                                        !!errors[`staff_${s.id}_rattachement`]
-                                    }
-                                    onEdit={() =>
-                                        setEditingStaffIds(
-                                            (prev) => new Set([...prev, s.id])
-                                        )
-                                    }
-                                    onRemove={() => form.removeStaff(s.id)}
-                                />
-                            )
-                        )}
+
+                {config.staff.length > 0 ? (
+                    <div className="space-y-2 mt-3">
+                        {config.staff.map((s) => (
+                            <StaffCardDisplay
+                                key={s.id}
+                                staff={s}
+                                rattachementLabel={getRattachementLabel(
+                                    s.rattachement,
+                                    config.zones
+                                )}
+                                hasError={false}
+                                // Pas de onEdit / onRemove — lecture seule à cette étape
+                            />
+                        ))}
+                    </div>
+                ) : (
+                    <div className="mt-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-3">
+                        <span className="text-gray-400 text-lg">👤</span>
+                        <p className="text-sm text-gray-500">
+                            Aucun adulte déclaré.{" "}
+                            <button
+                                type="button"
+                                onClick={onBack}
+                                className="text-blue-700 hover:underline"
+                            >
+                                Retourner à l'étape précédente
+                            </button>{" "}
+                            pour en ajouter.
+                        </p>
                     </div>
                 )}
-                <button
-                    type="button"
-                    onClick={() => {
-                        const id = form.addStaff();
-                        setEditingStaffIds((prev) => new Set([...prev, id]));
-                    }}
-                    className="mt-2 flex items-center gap-2 text-sm text-blue-700 hover:text-blue-900 transition-colors"
-                >
-                    <span className="text-lg leading-none">＋</span> Ajouter un
-                    personnel
-                </button>
-                <div className="flex items-center gap-3 mt-3 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
+
+                {/* Lignes vierges — reste configurable ici */}
+                <div className="flex items-center gap-3 mt-4 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
                     <label className="text-sm text-gray-600 flex-1">
                         Lignes vierges pour intervenants / personnels variables
                         du jour

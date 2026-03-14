@@ -2,31 +2,38 @@
  * CrisisCellSection.jsx
  * ─────────────────────
  * Section "Cellule de crise" de ConfigForm.
- * Remplace le bloc inline AdultSelector + showSubstitute de l'ancienne version.
- *
- * Responsabilités :
- * - Sélection du responsable principal (obligatoire, R5)
- * - Liste éditable des membres supplémentaires (0-N)
- * - Badge ⚠️ si un enseignant sélectionné quitte sa classe (R2)
- * - Exclusion des adultes déjà affectés dans les options (R1)
  *
  * Props :
- *   crisis       { responsible: AdultRef, members: AdultRef[] }
- *   onChange     (crisis) => void  — remplace l'intégralité de crisis
- *   teachers     { [className]: fullName }
- *   staff        [{ id, nom, prenom, fonction }]
- *   assignedIds  Set<string> des IDs déjà pris dans la config globale
- *   errors       objet d'erreurs du formulaire
+ *   crisis            { responsible: AdultRef, members: AdultRef[] }
+ *   onChange          (crisis) => void
+ *   teachers          { [className]: fullName }
+ *   staff             [{ id, nom, prenom, fonction }]
+ *   assignedIds       Set<string>
+ *   classSupervision  Record<classe, AdultRef|null>  ← nouveau
+ *   errors            objet d'erreurs
  */
 
 import AdultSelector from "../AdultSelector";
-import { emptyAdult, FONCTIONS_CRISE } from "../../utils/config/defaults";
+import { emptyAdult } from "../../utils/config/defaults";
 import { getAdultId } from "../../utils/config/adultId";
 
-// ── Sous-composant : badge de vacance ─────────────────────────────────────────
+// ── Sous-composant : badge d'état de la classe ────────────────────────────────
+// Affiche ⚠️ si la vacance n'est pas couverte, ✅ si elle l'est.
 
-function VacancyBadge({ teacherClass }) {
+function VacancyBadge({ teacherClass, classSupervision }) {
     if (!teacherClass) return null;
+
+    const isCovered = !!classSupervision?.[teacherClass];
+
+    if (isCovered) {
+        return (
+            <p className="mt-1.5 text-xs text-green-800 bg-green-50 border border-green-200 rounded-lg px-3 py-1.5 flex items-center gap-1.5">
+                <span aria-hidden="true">✅</span>
+                Classe <strong>{teacherClass}</strong> — superviseur désigné.
+            </p>
+        );
+    }
+
     return (
         <p className="mt-1.5 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 flex items-center gap-1.5">
             <span aria-hidden="true">⚠️</span>
@@ -46,6 +53,7 @@ function MemberRow({
     teachers,
     staff,
     excludeIds,
+    classSupervision,
 }) {
     return (
         <div className="bg-white border border-gray-200 rounded-xl p-3 space-y-2">
@@ -70,7 +78,10 @@ function MemberRow({
                 excludeIds={excludeIds}
             />
             {member.source === "teacher" && member.teacherClass && (
-                <VacancyBadge teacherClass={member.teacherClass} />
+                <VacancyBadge
+                    teacherClass={member.teacherClass}
+                    classSupervision={classSupervision}
+                />
             )}
         </div>
     );
@@ -84,12 +95,13 @@ export default function CrisisCellSection({
     teachers = {},
     staff = [],
     assignedIds = new Set(),
+    classSupervision = {},
     errors = {},
 }) {
     const responsible = crisis?.responsible ?? emptyAdult("Directeur/trice");
     const members = crisis?.members ?? [];
 
-    // ── Helpers de mutation ───────────────────────────────────────
+    // ── Mutations ─────────────────────────────────────────────────
 
     const setResponsible = (ref) =>
         onChange({ ...crisis, responsible: ref, members });
@@ -114,10 +126,7 @@ export default function CrisisCellSection({
             members: members.filter((_, i) => i !== idx),
         });
 
-    // ── excludeIds pour chaque sélecteur ─────────────────────────
-    // Principe : un adulte ne peut tenir qu'un seul rôle (R1).
-    // Pour le responsable : exclure tous les assignés SAUF lui-même.
-    // Pour chaque membre  : exclure tous les assignés SAUF lui-même.
+    // ── excludeIds par sélecteur ──────────────────────────────────
 
     const responsibleId = getAdultId(responsible);
     const excludeForResponsible = [...assignedIds].filter(
@@ -137,19 +146,25 @@ export default function CrisisCellSection({
                 <p className="text-xs text-gray-400 mb-3 leading-relaxed">
                     Dirige la cellule de crise, communique avec les secours
                     (SAMU 15, Police 17, Pompiers 18), l'IEN et la mairie.
+                    Généralement le/la directeur/trice.
                 </p>
                 <AdultSelector
                     value={responsible}
                     onChange={setResponsible}
                     teachers={teachers}
                     staff={staff}
-                    fonctionOptions={FONCTIONS_CRISE}
                     excludeIds={excludeForResponsible}
                     error={errors.crisisResponsible}
+                    // Pas de fonctionOptions : le fallback "Directeur/trice"
+                    // dans le docx couvre le cas courant. La saisie manuelle
+                    // permet de préciser si nécessaire (faisant-fonction, etc.)
                 />
                 {responsible.source === "teacher" &&
                     responsible.teacherClass && (
-                        <VacancyBadge teacherClass={responsible.teacherClass} />
+                        <VacancyBadge
+                            teacherClass={responsible.teacherClass}
+                            classSupervision={classSupervision}
+                        />
                     )}
             </div>
 
@@ -174,6 +189,7 @@ export default function CrisisCellSection({
                                 teachers={teachers}
                                 staff={staff}
                                 excludeIds={excludeForMember}
+                                classSupervision={classSupervision}
                             />
                         );
                     })}
@@ -192,8 +208,8 @@ export default function CrisisCellSection({
                 Ajouter un membre à la cellule
             </button>
             <p className="text-xs text-gray-400 pl-6 -mt-2">
-                Optionnel. Adultes qui assistent le/la responsable et ne gèrent
-                pas de classe pendant le PPMS.
+                Optionnel. Adultes qui assistent le/la responsable sans gérer de
+                classe pendant le PPMS.
             </p>
         </div>
     );
