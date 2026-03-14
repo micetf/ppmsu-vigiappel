@@ -1,15 +1,11 @@
 import { useState } from "react";
 import { toNom, toPrenom, fullName } from "../utils/formatName";
 import StepHelp from "./StepHelp";
+import AdultSelector from "./AdultSelector";
 
 // ── Factories ──────────────────────────────────────────────────────
 let _zoneId = 1;
-const newZone = () => ({
-    id: `z${++_zoneId}`,
-    name: "",
-    responsibleNom: "",
-    responsiblePrenom: "",
-});
+const newZoneId = () => `z${++_zoneId}`;
 
 let _staffId = 0;
 const newStaff = () => ({
@@ -20,11 +16,31 @@ const newStaff = () => ({
     rattachement: "",
 });
 
+// ── Valeur adulte vide ─────────────────────────────────────────────
+const emptyAdult = (defaultFonction = "") => ({
+    source: "manual",
+    teacherClass: "",
+    staffId: "",
+    nom: "",
+    prenom: "",
+    fonction: defaultFonction,
+    substitute: null,
+});
+
 // ── Constantes ─────────────────────────────────────────────────────
 const FONCTIONS_CRISE = [
     "Directeur/trice",
     "Directeur/trice adjoint(e)",
     "Enseignant(e) faisant fonction",
+];
+
+const FONCTIONS_ZONE = [
+    "Responsable de zone",
+    "Enseignant(e)",
+    "AESH",
+    "ATSEM",
+    "Personnel entretien/cantine",
+    "Autre",
 ];
 
 const FONCTIONS_STAFF = [
@@ -41,10 +57,10 @@ const FONCTIONS_STAFF = [
 const DEFAULTS = {
     schoolName: "",
     configType: "A",
-    zones: [{ id: "z1", name: "", responsibleNom: "", responsiblePrenom: "" }],
+    zones: [{ id: "z1", name: "" }],
     classZoneMap: {},
-    crisisCell: { nom: "", prenom: "", fonction: "Directeur/trice" },
-    classOverrides: {},
+    crisisCell: emptyAdult("Directeur/trice"),
+    zoneResponsibles: { z1: emptyAdult("Responsable de zone") },
     classExtraTeachers: {},
     staff: [],
     blankIntervenantRows: 5,
@@ -76,32 +92,37 @@ export default function ConfigForm({
         setErrors((p) => ({ ...p, [field]: undefined }));
     };
 
-    const setCrisisCell = (field, value) => {
-        setConfig((p) => ({
-            ...p,
-            crisisCell: { ...p.crisisCell, [field]: value },
-        }));
-        setErrors((p) => ({ ...p, [`crisisCell_${field}`]: undefined }));
-    };
-
     // ── Zones ──────────────────────────────────────────────────────
-    const updateZone = (id, field, value) => {
+    const updateZoneName = (id, name) =>
         setConfig((p) => ({
             ...p,
-            zones: p.zones.map((z) =>
-                z.id === id ? { ...z, [field]: value } : z
-            ),
+            zones: p.zones.map((z) => (z.id === id ? { ...z, name } : z)),
         }));
-        setErrors((p) => ({ ...p, [`zone_${id}_${field}`]: undefined }));
-    };
 
-    const addZone = () =>
-        setConfig((p) => ({ ...p, zones: [...p.zones, newZone()] }));
+    const setZoneResponsible = (zoneId, value) =>
+        setConfig((p) => ({
+            ...p,
+            zoneResponsibles: { ...p.zoneResponsibles, [zoneId]: value },
+        }));
+
+    const addZone = () => {
+        const id = newZoneId();
+        setConfig((p) => ({
+            ...p,
+            zones: [...p.zones, { id, name: "" }],
+            zoneResponsibles: {
+                ...p.zoneResponsibles,
+                [id]: emptyAdult("Responsable de zone"),
+            },
+        }));
+    };
 
     const removeZone = (id) =>
         setConfig((p) => {
             const zones = p.zones.filter((z) => z.id !== id);
             const fallback = zones[0]?.id;
+            const { [id]: _removed, ...restResponsibles } =
+                p.zoneResponsibles || {};
             const classZoneMap = Object.fromEntries(
                 Object.entries(p.classZoneMap).map(([cl, zid]) => [
                     cl,
@@ -113,7 +134,13 @@ export default function ConfigForm({
                     ? { ...s, rattachement: fallback ?? "" }
                     : s
             );
-            return { ...p, zones, classZoneMap, staff };
+            return {
+                ...p,
+                zones,
+                classZoneMap,
+                staff,
+                zoneResponsibles: restResponsibles,
+            };
         });
 
     const setClassZone = (cl, zoneId) =>
@@ -121,6 +148,40 @@ export default function ConfigForm({
             ...p,
             classZoneMap: { ...p.classZoneMap, [cl]: zoneId },
         }));
+
+    // ── Extra teachers ─────────────────────────────────────────────
+    const addExtraTeacher = (cl) =>
+        setConfig((p) => ({
+            ...p,
+            classExtraTeachers: {
+                ...p.classExtraTeachers,
+                [cl]: [
+                    ...(p.classExtraTeachers[cl] || []),
+                    { nom: "", prenom: "", fonction: "Décharge" },
+                ],
+            },
+        }));
+
+    const updateExtraTeacher = (cl, idx, field, value) =>
+        setConfig((p) => {
+            const list = [...(p.classExtraTeachers[cl] || [])];
+            list[idx] = { ...list[idx], [field]: value };
+            return {
+                ...p,
+                classExtraTeachers: { ...p.classExtraTeachers, [cl]: list },
+            };
+        });
+
+    const removeExtraTeacher = (cl, idx) =>
+        setConfig((p) => {
+            const list = (p.classExtraTeachers[cl] || []).filter(
+                (_, i) => i !== idx
+            );
+            return {
+                ...p,
+                classExtraTeachers: { ...p.classExtraTeachers, [cl]: list },
+            };
+        });
 
     // ── Staff ──────────────────────────────────────────────────────
     const addStaff = () => {
@@ -148,32 +209,37 @@ export default function ConfigForm({
         });
     };
 
-    const validateStaff = (id) =>
-        setEditingStaffIds((prev) => {
-            const n = new Set(prev);
-            n.delete(id);
-            return n;
-        });
-
-    const editStaff = (id) =>
-        setEditingStaffIds((prev) => new Set([...prev, id]));
-
     // ── Validation ─────────────────────────────────────────────────
+    const validateAdult = (adult) => {
+        if (!adult) return "Champ obligatoire";
+        if (adult.source === "manual" && !adult.nom?.trim())
+            return "Champ obligatoire";
+        if (adult.source === "teacher" && !adult.teacherClass)
+            return "Champ obligatoire";
+        if (adult.source === "staff" && !adult.staffId)
+            return "Champ obligatoire";
+        return null;
+    };
+
     const validate = () => {
         const e = {};
         if (!config.schoolName.trim()) e.schoolName = "Champ obligatoire";
-        if (!config.crisisCell.nom.trim())
-            e.crisisCell_nom = "Champ obligatoire";
+
+        const ccErr = validateAdult(config.crisisCell);
+        if (ccErr) e.crisisCell = ccErr;
+
         config.zones.forEach((z) => {
             if (!z.name.trim()) e[`zone_${z.id}_name`] = "Champ obligatoire";
-            if (!z.responsibleNom.trim())
-                e[`zone_${z.id}_responsibleNom`] = "Champ obligatoire";
+            const respErr = validateAdult(config.zoneResponsibles?.[z.id]);
+            if (respErr) e[`zone_${z.id}_responsible`] = respErr;
         });
+
         config.staff.forEach((s) => {
             if (!s.nom.trim()) e[`staff_${s.id}_nom`] = "Obligatoire";
             if (!s.rattachement)
                 e[`staff_${s.id}_rattachement`] = "Obligatoire";
         });
+
         return e;
     };
 
@@ -202,12 +268,15 @@ export default function ConfigForm({
     const multiZone = config.zones.length > 1;
     const showClassMap = config.configType === "B" && multiZone;
     const docCount = (config.configType === "A" ? 1 : config.zones.length) + 1;
-    const overrideCount = Object.values(config.classOverrides || {}).filter(
-        (o) => o?.teacherUnavailable
-    ).length;
+
+    const extrasCount = Object.values(config.classExtraTeachers || {}).reduce(
+        (acc, arr) => acc + (arr?.filter((et) => et.nom.trim()).length || 0),
+        0
+    );
 
     const getRattachementLabel = (rattachement) => {
         if (!rattachement) return "⚠️ Non rattaché";
+        if (rattachement === "cellule") return "Cellule de crise";
         if (rattachement.startsWith("class_"))
             return `Classe ${rattachement.replace("class_", "")}`;
         const zone = config.zones.find((z) => z.id === rattachement);
@@ -221,7 +290,7 @@ export default function ConfigForm({
         },
         ...config.zones.map((z, i) => ({
             value: z.id,
-            label: `Zone ${i + 1}${z.name ? " — " + z.name : ""} (adulte sans classe)`,
+            label: `Zone ${i + 1}${z.name ? " — " + z.name : ""} (adulte sans classe assignée)`,
         })),
         ...classes.map((cl) => ({
             value: `class_${cl}`,
@@ -229,12 +298,13 @@ export default function ConfigForm({
         })),
     ];
 
-    const summaryText = [
+    // ── Résumé barre sticky ────────────────────────────────────────
+    const summaryParts = [
         config.schoolName || "École non définie",
         `Option ${config.configType}`,
         `${config.zones.length} zone${config.zones.length > 1 ? "s" : ""}`,
-        overrideCount > 0
-            ? `${overrideCount} remplacement${overrideCount > 1 ? "s" : ""}`
+        extrasCount > 0
+            ? `${extrasCount} décharge${extrasCount > 1 ? "s" : ""}`
             : null,
         `→ ${docCount} doc${docCount > 1 ? "s" : ""}`,
     ]
@@ -249,25 +319,20 @@ export default function ConfigForm({
             >
                 <div className="pt-3 space-y-2 text-sm">
                     <p>
-                        <strong>🏫 Votre école</strong> — Nom tel qu'il
-                        apparaîtra en en-tête, et identité du/de la
-                        directeur/trice (responsable de la cellule de crise).
+                        <strong>🏫 Votre école</strong> — Nom et identité du/de
+                        la responsable de la cellule de crise (directeur/trice
+                        le plus souvent). Si c'est un(e) enseignant(e), vous
+                        pourrez désigner qui le remplace avec sa classe.
                     </p>
                     <p>
-                        <strong>📍 Zones</strong> — Lieu(x) de confinement et
-                        adulte responsable de chaque zone. La plupart des écoles
-                        n'ont qu'une seule zone.
-                    </p>
-                    <p>
-                        <strong>🔄 Encadrement PPMS</strong> — Si un enseignant
-                        ne sera pas avec sa classe (directrice à la cellule de
-                        crise, responsable de zone…), désigner son remplaçant
-                        ici.
+                        <strong>📍 Zones</strong> — Pour chaque zone, indiquer
+                        le lieu et son responsable. Même logique : si le/la
+                        responsable est enseignant(e), un substitut est demandé
+                        immédiatement.
                     </p>
                     <p>
                         <strong>👥 Autres adultes</strong> — AESH, ATSEM,
-                        entretien, service civique… Les enseignants sont déjà
-                        extraits du CSV.
+                        entretien… Les enseignants viennent du CSV.
                     </p>
                 </div>
             </StepHelp>
@@ -277,8 +342,7 @@ export default function ConfigForm({
                     Étape 3 – Configuration des fiches
                 </h2>
                 <p className="text-sm text-gray-500">
-                    Ces informations figureront dans l'en-tête des documents —
-                    modèle Eduscol PPMS 2024.
+                    Modèle Eduscol PPMS, fascicule 2, février 2024.
                 </p>
             </div>
 
@@ -304,52 +368,23 @@ export default function ConfigForm({
                         </span>
                     </div>
                     <p className="text-xs text-blue-700 leading-relaxed">
-                        Pilote la cellule de crise : communications avec les
-                        secours (112, IEN, mairie), centralise les bilans de
-                        toutes les zones. Ne gère pas de classe pendant le PPMS.
+                        Pilote la cellule de crise : appels aux secours (112,
+                        IEN, mairie), centralise les bilans. Ne gère pas de
+                        classe pendant le PPMS.
                     </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <Field label="NOM" error={errors.crisisCell_nom}>
-                            <input
-                                type="text"
-                                placeholder="DUPONT"
-                                value={config.crisisCell.nom}
-                                onChange={(e) =>
-                                    setCrisisCell("nom", toNom(e.target.value))
-                                }
-                                className={cx(errors.crisisCell_nom)}
-                            />
-                        </Field>
-                        <Field label="Prénom" optional>
-                            <input
-                                type="text"
-                                placeholder="Marie"
-                                value={config.crisisCell.prenom}
-                                onChange={(e) =>
-                                    setCrisisCell(
-                                        "prenom",
-                                        toPrenom(e.target.value)
-                                    )
-                                }
-                                className={cx()}
-                            />
-                        </Field>
-                        <Field label="Fonction" optional>
-                            <select
-                                value={config.crisisCell.fonction}
-                                onChange={(e) =>
-                                    setCrisisCell("fonction", e.target.value)
-                                }
-                                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                            >
-                                {FONCTIONS_CRISE.map((f) => (
-                                    <option key={f} value={f}>
-                                        {f}
-                                    </option>
-                                ))}
-                            </select>
-                        </Field>
-                    </div>
+                    <AdultSelector
+                        value={config.crisisCell}
+                        onChange={(v) => {
+                            setField("crisisCell", v);
+                            setErrors((p) => ({ ...p, crisisCell: undefined }));
+                        }}
+                        teachers={teacherByClass}
+                        staff={config.staff}
+                        fonctionOptions={FONCTIONS_CRISE}
+                        showSubstitute={true}
+                        substituteTitle="Qui encadrera cette classe pendant le PPMS ?"
+                        error={errors.crisisCell}
+                    />
                 </div>
             </Section>
 
@@ -415,8 +450,13 @@ export default function ConfigForm({
                                         setField("configType", opt.id);
                                         setShowFormatOptions(false);
                                     }}
-                                    className={`text-left rounded-xl border-2 p-4 transition-all outline-none focus-visible:ring-2 focus-visible:ring-blue-500
-                    ${config.configType === opt.id ? "border-blue-700 bg-blue-50" : "border-gray-200 bg-white hover:border-blue-300"}`}
+                                    className={`text-left rounded-xl border-2 p-4 transition-all outline-none
+                    focus-visible:ring-2 focus-visible:ring-blue-500
+                    ${
+                        config.configType === opt.id
+                            ? "border-blue-700 bg-blue-50"
+                            : "border-gray-200 bg-white hover:border-blue-300"
+                    }`}
                                 >
                                     <div className="flex items-center gap-2 mb-1.5">
                                         <span
@@ -447,7 +487,7 @@ export default function ConfigForm({
                 )}
             </Section>
 
-            {/* ── 3. Zones de mise en sûreté ──────────────────────────── */}
+            {/* ── 3. Zones ────────────────────────────────────────────── */}
             <Section title="Zones de mise en sûreté">
                 <div className="space-y-4">
                     {config.zones.map((zone, idx) => (
@@ -465,11 +505,12 @@ export default function ConfigForm({
                                         onClick={() => removeZone(zone.id)}
                                         className="text-xs text-red-500 hover:text-red-700 transition-colors"
                                     >
-                                        Supprimer cette zone
+                                        Supprimer
                                     </button>
                                 )}
                             </div>
 
+                            {/* Lieu */}
                             <Field
                                 label="Lieu de confinement"
                                 error={errors[`zone_${zone.id}_name`]}
@@ -479,11 +520,7 @@ export default function ConfigForm({
                                     placeholder="Gymnase, salle polyvalente, couloir condamnable…"
                                     value={zone.name}
                                     onChange={(e) =>
-                                        updateZone(
-                                            zone.id,
-                                            "name",
-                                            e.target.value
-                                        )
+                                        updateZoneName(zone.id, e.target.value)
                                     }
                                     className={cx(
                                         errors[`zone_${zone.id}_name`]
@@ -491,69 +528,52 @@ export default function ConfigForm({
                                 />
                             </Field>
 
-                            <div className="bg-white border border-gray-200 rounded-lg p-3 space-y-3">
+                            {/* Responsable */}
+                            <div className="bg-white border border-gray-200 rounded-lg p-3 space-y-2">
                                 <div>
                                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
                                         Responsable de zone
                                     </p>
                                     <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">
+                                        Centralise les fiches et les remonte à
+                                        la cellule de crise.
                                         {multiZone
-                                            ? "Centralise les remontées de cette zone et les transmet à la cellule de crise. Doit être différent du directeur/de la directrice."
-                                            : "Centralise les fiches de recensement et les remonte à la cellule de crise."}
+                                            ? " Doit être différent du/de la directeur/trice."
+                                            : ""}
                                     </p>
                                 </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <Field
-                                        label="NOM"
-                                        error={
-                                            errors[
-                                                `zone_${zone.id}_responsibleNom`
-                                            ]
-                                        }
-                                    >
-                                        <input
-                                            type="text"
-                                            placeholder="MARTIN"
-                                            value={zone.responsibleNom}
-                                            onChange={(e) =>
-                                                updateZone(
-                                                    zone.id,
-                                                    "responsibleNom",
-                                                    toNom(e.target.value)
-                                                )
-                                            }
-                                            className={cx(
-                                                errors[
-                                                    `zone_${zone.id}_responsibleNom`
-                                                ]
-                                            )}
-                                        />
-                                    </Field>
-                                    <Field label="Prénom" optional>
-                                        <input
-                                            type="text"
-                                            placeholder="Paul"
-                                            value={zone.responsiblePrenom}
-                                            onChange={(e) =>
-                                                updateZone(
-                                                    zone.id,
-                                                    "responsiblePrenom",
-                                                    toPrenom(e.target.value)
-                                                )
-                                            }
-                                            className={cx()}
-                                        />
-                                    </Field>
-                                </div>
+                                <AdultSelector
+                                    value={
+                                        config.zoneResponsibles?.[zone.id] ||
+                                        emptyAdult("Responsable de zone")
+                                    }
+                                    onChange={(v) => {
+                                        setZoneResponsible(zone.id, v);
+                                        setErrors((p) => ({
+                                            ...p,
+                                            [`zone_${zone.id}_responsible`]:
+                                                undefined,
+                                        }));
+                                    }}
+                                    teachers={teacherByClass}
+                                    staff={config.staff}
+                                    fonctionOptions={FONCTIONS_ZONE}
+                                    showSubstitute={true}
+                                    substituteTitle={`Qui encadrera la classe pendant le PPMS pendant que cette personne gère la zone ?`}
+                                    error={
+                                        errors[`zone_${zone.id}_responsible`]
+                                    }
+                                />
                             </div>
                         </div>
                     ))}
                 </div>
-                <div className="space-y-1">
+
+                <div className="space-y-1 mt-2">
                     <button
                         type="button"
                         onClick={addZone}
-                        className="mt-2 flex items-center gap-2 text-sm text-blue-700 hover:text-blue-900 transition-colors"
+                        className="flex items-center gap-2 text-sm text-blue-700 hover:text-blue-900 transition-colors"
                     >
                         <span className="text-lg leading-none">＋</span> Ajouter
                         une zone
@@ -565,7 +585,7 @@ export default function ConfigForm({
                 </div>
             </Section>
 
-            {/* ── 4. Affectation classes → zones (si multi-zones) ─────── */}
+            {/* ── 4. Affectation classes → zones ──────────────────────── */}
             {showClassMap && (
                 <Section title="Affectation des classes aux zones">
                     <p className="text-sm text-gray-500 mb-3">
@@ -603,24 +623,26 @@ export default function ConfigForm({
                 </Section>
             )}
 
-            {/* ── 4bis. Encadrement PPMS par classe ───────────────────── */}
-            <Section title="Encadrement PPMS par classe">
-                <EncadrementSection
+            {/* ── 5. Co-titulaires / décharges ────────────────────────── */}
+            <Section title="Co-titulaires et décharges">
+                <ExtraTeachersSection
                     classes={classes}
                     teacherByClass={teacherByClass}
-                    config={config}
-                    setConfig={setConfig}
+                    classExtraTeachers={config.classExtraTeachers || {}}
+                    onAdd={addExtraTeacher}
+                    onUpdate={updateExtraTeacher}
+                    onRemove={removeExtraTeacher}
+                    extrasCount={extrasCount}
                 />
             </Section>
 
-            {/* ── 5. Autres adultes ───────────────────────────────────── */}
+            {/* ── 6. Autres adultes ───────────────────────────────────── */}
             <Section title="Autres adultes">
                 <p className="text-sm text-gray-500">
-                    Saisir les adultes présents dans l'école hors enseignants —
-                    déjà extraits du CSV. Le/la directeur/trice est déjà
-                    renseigné(e) ci-dessus. Pour les autres membres de la
-                    cellule de crise (directeur/trice adjoint(e), secrétaire…),
-                    choisir le rattachement <strong>"Cellule de crise"</strong>.
+                    AESH, ATSEM, entretien, service civique… Les enseignants
+                    viennent du CSV. Les membres de la cellule de crise autres
+                    que le directeur/la directrice peuvent être rattachés à{" "}
+                    <strong>"Cellule de crise"</strong>.
                 </p>
 
                 {config.staff.length > 0 && (
@@ -633,7 +655,13 @@ export default function ConfigForm({
                                     onUpdate={(field, value) =>
                                         updateStaff(s.id, field, value)
                                     }
-                                    onValidate={() => validateStaff(s.id)}
+                                    onValidate={() =>
+                                        setEditingStaffIds((prev) => {
+                                            const n = new Set(prev);
+                                            n.delete(s.id);
+                                            return n;
+                                        })
+                                    }
                                     onRemove={() => removeStaff(s.id)}
                                     rattachementOptions={rattachementOptions}
                                     errors={errors}
@@ -649,7 +677,11 @@ export default function ConfigForm({
                                         !!errors[`staff_${s.id}_nom`] ||
                                         !!errors[`staff_${s.id}_rattachement`]
                                     }
-                                    onEdit={() => editStaff(s.id)}
+                                    onEdit={() =>
+                                        setEditingStaffIds(
+                                            (prev) => new Set([...prev, s.id])
+                                        )
+                                    }
                                     onRemove={() => removeStaff(s.id)}
                                 />
                             )
@@ -690,7 +722,7 @@ export default function ConfigForm({
             {/* ── Barre sticky ────────────────────────────────────────── */}
             <div className="sticky bottom-0 z-10 -mx-6 px-6 py-4 bg-white/95 backdrop-blur-sm border-t border-gray-200 shadow-[0_-2px_8px_rgba(0,0,0,0.08)]">
                 <p className="text-xs text-gray-400 mb-2 truncate">
-                    {summaryText}
+                    {summaryParts}
                 </p>
                 <div className="flex flex-wrap gap-3">
                     <button
@@ -712,92 +744,20 @@ export default function ConfigForm({
     );
 }
 
-// ── Section Configuration avancée par classe ───────────────────────
-function EncadrementSection({ classes, teacherByClass, config, setConfig }) {
+// ── Section co-titulaires ──────────────────────────────────────────
+function ExtraTeachersSection({
+    classes,
+    teacherByClass,
+    classExtraTeachers,
+    onAdd,
+    onUpdate,
+    onRemove,
+    extrasCount,
+}) {
     const [open, setOpen] = useState(false);
-    const overrides = config.classOverrides || {};
-    const extraTeachers = config.classExtraTeachers || {};
-
-    const activeOverrides = Object.values(overrides).filter(
-        (o) => o?.teacherUnavailable
-    ).length;
-    const activeExtras = Object.values(extraTeachers).filter(
-        (v) => v?.length > 0
-    ).length;
-    const totalActive = activeOverrides + activeExtras;
-
-    // ── Overrides ──
-    const toggleClass = (cl, enabled) =>
-        setConfig((p) => ({
-            ...p,
-            classOverrides: {
-                ...p.classOverrides,
-                [cl]: enabled
-                    ? {
-                          teacherUnavailable: true,
-                          substituteSource: "staff",
-                          substituteStaffId: "",
-                          substituteNom: "",
-                          substitutePrenom: "",
-                          substituteFonction: "",
-                      }
-                    : undefined,
-            },
-        }));
-
-    const updateOverride = (cl, updates) =>
-        setConfig((p) => ({
-            ...p,
-            classOverrides: {
-                ...p.classOverrides,
-                [cl]: { ...p.classOverrides[cl], ...updates },
-            },
-        }));
-
-    // ── Décharges ──
-    const addExtraTeacher = (cl) =>
-        setConfig((p) => ({
-            ...p,
-            classExtraTeachers: {
-                ...p.classExtraTeachers,
-                [cl]: [
-                    ...(p.classExtraTeachers[cl] || []),
-                    { nom: "", prenom: "", fonction: "Décharge" },
-                ],
-            },
-        }));
-
-    const updateExtraTeacher = (cl, idx, field, value) =>
-        setConfig((p) => {
-            const list = [...(p.classExtraTeachers[cl] || [])];
-            list[idx] = { ...list[idx], [field]: value };
-            return {
-                ...p,
-                classExtraTeachers: { ...p.classExtraTeachers, [cl]: list },
-            };
-        });
-
-    const removeExtraTeacher = (cl, idx) =>
-        setConfig((p) => {
-            const list = (p.classExtraTeachers[cl] || []).filter(
-                (_, i) => i !== idx
-            );
-            return {
-                ...p,
-                classExtraTeachers: { ...p.classExtraTeachers, [cl]: list },
-            };
-        });
-
-    const staffOptions = config.staff.map((s) => ({
-        value: s.id,
-        label: [fullName(s.nom, s.prenom), s.fonction]
-            .filter(Boolean)
-            .join(" — "),
-    }));
 
     return (
         <div className="border border-gray-200 rounded-xl overflow-hidden">
-            {/* Accordéon */}
             <button
                 type="button"
                 onClick={() => setOpen((o) => !o)}
@@ -806,12 +766,11 @@ function EncadrementSection({ classes, teacherByClass, config, setConfig }) {
             >
                 <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-semibold text-gray-700">
-                        Configuration avancée par classe
+                        Co-titulaires / décharges / temps partiels
                     </span>
-                    {totalActive > 0 ? (
-                        <span className="bg-amber-100 text-amber-800 text-xs font-semibold px-2 py-0.5 rounded-full">
-                            {totalActive} modification
-                            {totalActive > 1 ? "s" : ""}
+                    {extrasCount > 0 ? (
+                        <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-0.5 rounded-full">
+                            {extrasCount} ajouté{extrasCount > 1 ? "s" : ""}
                         </span>
                     ) : (
                         <span className="text-xs text-gray-400">Optionnel</span>
@@ -835,372 +794,124 @@ function EncadrementSection({ classes, teacherByClass, config, setConfig }) {
             {open && (
                 <div className="divide-y divide-gray-100">
                     <p className="px-4 py-3 text-xs text-gray-500 leading-relaxed bg-white">
-                        <strong>Décharge / temps partiel</strong> — ajouter
-                        un(e) co-titulaire permanent(e) de la classe. Les deux
-                        enseignant(e)s apparaissent sur la fiche avec leurs
-                        cases à cocher. <strong>Remplacement</strong> — si un(e)
-                        enseignant(e) ne sera pas avec son groupe pendant le
-                        PPMS (directrice à la cellule de crise, responsable de
-                        zone…), son nom reste visible avec mention de sa mission
-                        et un(e) remplaçant(e) est désigné(e).
+                        Pour chaque classe, ajouter les adultes qui co-encadrent
+                        le groupe régulièrement : enseignant(e) à mi-temps,
+                        décharge, remplaçant(e) habituel(le)… Ils apparaîtront
+                        sur la fiche avec leurs cases à cocher — le responsable
+                        sur place coche les présents selon le jour.
                     </p>
 
                     {classes.map((cl) => {
-                        const teacher = teacherByClass[cl];
-                        const override = overrides[cl];
-                        const extras = extraTeachers[cl] || [];
-                        const isOverridden = !!override?.teacherUnavailable;
-
+                        const extras = classExtraTeachers[cl] || [];
                         return (
                             <div
                                 key={cl}
-                                className="px-4 py-4 space-y-4 bg-white"
+                                className="px-4 py-3 space-y-2 bg-white"
                             >
-                                {/* En-tête classe */}
-                                <div className="flex items-center gap-2">
-                                    <span className="text-sm font-bold text-gray-800 bg-gray-100 px-2 py-0.5 rounded">
-                                        {cl}
-                                    </span>
-                                    <span className="text-sm text-gray-500">
-                                        {teacher || (
-                                            <em className="text-gray-400">
-                                                Enseignant(e) non détecté(e)
-                                                dans le CSV
-                                            </em>
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs font-bold text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
+                                            {cl}
+                                        </span>
+                                        {teacherByClass[cl] && (
+                                            <span className="text-xs text-gray-500">
+                                                {teacherByClass[cl]}
+                                            </span>
                                         )}
-                                    </span>
-                                </div>
-
-                                {/* ── Décharge / co-titulaire ── */}
-                                <div className="space-y-2">
-                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                                        Co-titulaire(s) / Décharge(s)
-                                    </p>
-
-                                    {extras.map((et, idx) => (
-                                        <div
-                                            key={idx}
-                                            className="flex flex-wrap items-end gap-2 bg-gray-50 border border-gray-200 rounded-lg p-3"
-                                        >
-                                            <div className="flex-1 min-w-30">
-                                                <label className="block text-xs font-medium text-gray-600 mb-1">
-                                                    NOM
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    placeholder="BERNARD"
-                                                    value={et.nom}
-                                                    onChange={(e) =>
-                                                        updateExtraTeacher(
-                                                            cl,
-                                                            idx,
-                                                            "nom",
-                                                            toNom(
-                                                                e.target.value
-                                                            )
-                                                        )
-                                                    }
-                                                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                                                />
-                                            </div>
-                                            <div className="flex-1 min-w-25">
-                                                <label className="block text-xs font-medium text-gray-600 mb-1">
-                                                    Prénom
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    placeholder="Claire"
-                                                    value={et.prenom}
-                                                    onChange={(e) =>
-                                                        updateExtraTeacher(
-                                                            cl,
-                                                            idx,
-                                                            "prenom",
-                                                            toPrenom(
-                                                                e.target.value
-                                                            )
-                                                        )
-                                                    }
-                                                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                                                />
-                                            </div>
-                                            <div className="flex-1 min-w-25">
-                                                <label className="block text-xs font-medium text-gray-600 mb-1">
-                                                    Fonction
-                                                </label>
-                                                <select
-                                                    value={et.fonction}
-                                                    onChange={(e) =>
-                                                        updateExtraTeacher(
-                                                            cl,
-                                                            idx,
-                                                            "fonction",
-                                                            e.target.value
-                                                        )
-                                                    }
-                                                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                                                >
-                                                    {[
-                                                        "Décharge",
-                                                        "Mi-temps",
-                                                        "Co-titulaire",
-                                                        "Remplaçant(e) habituel(le)",
-                                                    ].map((f) => (
-                                                        <option
-                                                            key={f}
-                                                            value={f}
-                                                        >
-                                                            {f}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    removeExtraTeacher(cl, idx)
-                                                }
-                                                className="text-xs text-red-400 hover:text-red-600 pb-2 shrink-0 transition-colors"
-                                                aria-label="Supprimer"
-                                            >
-                                                ✕
-                                            </button>
-                                        </div>
-                                    ))}
-
+                                    </div>
                                     <button
                                         type="button"
-                                        onClick={() => addExtraTeacher(cl)}
-                                        className="flex items-center gap-1.5 text-xs text-blue-700 hover:text-blue-900 transition-colors"
+                                        onClick={() => onAdd(cl)}
+                                        className="text-xs text-blue-700 hover:text-blue-900 transition-colors flex items-center gap-1"
                                     >
                                         <span className="text-base leading-none">
                                             ＋
-                                        </span>
-                                        Ajouter une décharge / co-titulaire
+                                        </span>{" "}
+                                        Ajouter
                                     </button>
                                 </div>
 
-                                {/* ── Remplacement ── */}
-                                <div className="space-y-2 pt-2 border-t border-dashed border-gray-200">
-                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                                        Remplacement d'encadrement PPMS
-                                    </p>
-
-                                    <label className="flex items-start gap-3 cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={isOverridden}
-                                            onChange={(e) =>
-                                                toggleClass(
-                                                    cl,
-                                                    e.target.checked
-                                                )
-                                            }
-                                            className="mt-0.5 w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
-                                        />
-                                        <span className="text-sm text-gray-700">
-                                            {teacher ? (
-                                                <>
-                                                    <strong>{teacher}</strong>{" "}
-                                                    ne sera pas avec ce groupe
-                                                    pendant le PPMS
-                                                </>
-                                            ) : (
-                                                <>
-                                                    L'enseignant(e) ne sera pas
-                                                    avec ce groupe pendant le
-                                                    PPMS
-                                                </>
-                                            )}
-                                        </span>
-                                    </label>
-
-                                    {isOverridden && (
-                                        <div className="ml-7 bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-3">
-                                            <p className="text-xs font-semibold text-amber-900">
-                                                Adulte qui encadrera ce groupe
-                                                pendant le PPMS :
-                                            </p>
-
-                                            <div className="flex gap-2">
-                                                {[
-                                                    {
-                                                        value: "staff",
-                                                        label: "Choisir dans la liste",
-                                                    },
-                                                    {
-                                                        value: "manual",
-                                                        label: "Saisir manuellement",
-                                                    },
-                                                ].map((opt) => (
-                                                    <button
-                                                        key={opt.value}
-                                                        type="button"
-                                                        onClick={() =>
-                                                            updateOverride(cl, {
-                                                                substituteSource:
-                                                                    opt.value,
-                                                            })
-                                                        }
-                                                        className={`text-xs px-3 py-1.5 rounded-lg border transition-colors
-                              ${
-                                  override.substituteSource === opt.value
-                                      ? "bg-amber-600 text-white border-amber-600"
-                                      : "bg-white text-amber-700 border-amber-300 hover:border-amber-500"
-                              }`}
-                                                    >
-                                                        {opt.label}
-                                                    </button>
-                                                ))}
-                                            </div>
-
-                                            {override.substituteSource ===
-                                                "staff" &&
-                                                (staffOptions.length > 0 ? (
-                                                    <select
-                                                        value={
-                                                            override.substituteStaffId ||
-                                                            ""
-                                                        }
-                                                        onChange={(e) =>
-                                                            updateOverride(cl, {
-                                                                substituteStaffId:
-                                                                    e.target
-                                                                        .value,
-                                                            })
-                                                        }
-                                                        className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-400"
-                                                    >
-                                                        <option value="">
-                                                            — Sélectionner un
-                                                            adulte —
-                                                        </option>
-                                                        {staffOptions.map(
-                                                            (o) => (
-                                                                <option
-                                                                    key={
-                                                                        o.value
-                                                                    }
-                                                                    value={
-                                                                        o.value
-                                                                    }
-                                                                >
-                                                                    {o.label}
-                                                                </option>
-                                                            )
-                                                        )}
-                                                    </select>
-                                                ) : (
-                                                    <p className="text-xs text-amber-700 bg-amber-100 rounded-lg px-3 py-2">
-                                                        Aucun adulte dans
-                                                        "Autres adultes".
-                                                        Renseigner d'abord cette
-                                                        section, ou utiliser la
-                                                        saisie manuelle.
-                                                    </p>
-                                                ))}
-
-                                            {override.substituteSource ===
-                                                "manual" && (
-                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                                    {[
-                                                        {
-                                                            key: "substituteNom",
-                                                            label: "NOM",
-                                                            placeholder:
-                                                                "GARCIA",
-                                                            transform: toNom,
-                                                        },
-                                                        {
-                                                            key: "substitutePrenom",
-                                                            label: "Prénom",
-                                                            placeholder: "Ana",
-                                                            transform: toPrenom,
-                                                        },
-                                                    ].map(
-                                                        ({
-                                                            key,
-                                                            label,
-                                                            placeholder,
-                                                            transform,
-                                                        }) => (
-                                                            <div key={key}>
-                                                                <label className="block text-xs font-medium text-amber-800 mb-1">
-                                                                    {label}
-                                                                </label>
-                                                                <input
-                                                                    type="text"
-                                                                    placeholder={
-                                                                        placeholder
-                                                                    }
-                                                                    value={
-                                                                        override[
-                                                                            key
-                                                                        ] || ""
-                                                                    }
-                                                                    onChange={(
-                                                                        e
-                                                                    ) =>
-                                                                        updateOverride(
-                                                                            cl,
-                                                                            {
-                                                                                [key]: transform(
-                                                                                    e
-                                                                                        .target
-                                                                                        .value
-                                                                                ),
-                                                                            }
-                                                                        )
-                                                                    }
-                                                                    className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-400"
-                                                                />
-                                                            </div>
-                                                        )
-                                                    )}
-                                                    <div>
-                                                        <label className="block text-xs font-medium text-amber-800 mb-1">
-                                                            Fonction
-                                                        </label>
-                                                        <select
-                                                            value={
-                                                                override.substituteFonction ||
-                                                                ""
-                                                            }
-                                                            onChange={(e) =>
-                                                                updateOverride(
-                                                                    cl,
-                                                                    {
-                                                                        substituteFonction:
-                                                                            e
-                                                                                .target
-                                                                                .value,
-                                                                    }
-                                                                )
-                                                            }
-                                                            className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-400"
-                                                        >
-                                                            <option value="">
-                                                                — Fonction —
-                                                            </option>
-                                                            {FONCTIONS_STAFF.map(
-                                                                (f) => (
-                                                                    <option
-                                                                        key={f}
-                                                                        value={
-                                                                            f
-                                                                        }
-                                                                    >
-                                                                        {f}
-                                                                    </option>
-                                                                )
-                                                            )}
-                                                        </select>
-                                                    </div>
-                                                </div>
-                                            )}
+                                {extras.map((et, idx) => (
+                                    <div
+                                        key={idx}
+                                        className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end bg-gray-50 border border-gray-200 rounded-lg p-2"
+                                    >
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                                                NOM
+                                            </label>
+                                            <input
+                                                type="text"
+                                                placeholder="BERNARD"
+                                                value={et.nom}
+                                                onChange={(e) =>
+                                                    onUpdate(
+                                                        cl,
+                                                        idx,
+                                                        "nom",
+                                                        toNom(e.target.value)
+                                                    )
+                                                }
+                                                className="w-full rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                            />
                                         </div>
-                                    )}
-                                </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                                                Prénom
+                                            </label>
+                                            <input
+                                                type="text"
+                                                placeholder="Claire"
+                                                value={et.prenom}
+                                                onChange={(e) =>
+                                                    onUpdate(
+                                                        cl,
+                                                        idx,
+                                                        "prenom",
+                                                        toPrenom(e.target.value)
+                                                    )
+                                                }
+                                                className="w-full rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                                                Rôle
+                                            </label>
+                                            <select
+                                                value={et.fonction}
+                                                onChange={(e) =>
+                                                    onUpdate(
+                                                        cl,
+                                                        idx,
+                                                        "fonction",
+                                                        e.target.value
+                                                    )
+                                                }
+                                                className="w-full rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                            >
+                                                {[
+                                                    "Décharge",
+                                                    "Mi-temps",
+                                                    "Co-titulaire",
+                                                    "Remplaçant(e) habituel(le)",
+                                                ].map((f) => (
+                                                    <option key={f} value={f}>
+                                                        {f}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => onRemove(cl, idx)}
+                                            className="text-xs text-red-400 hover:text-red-600 pb-1 transition-colors"
+                                            aria-label="Supprimer"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                ))}
                             </div>
                         );
                     })}
@@ -1210,7 +921,7 @@ function EncadrementSection({ classes, teacherByClass, config, setConfig }) {
     );
 }
 
-// ── Carte staff — mode édition ─────────────────────────────────────
+// ── Cartes staff ───────────────────────────────────────────────────
 function StaffCardEditing({
     staff,
     onUpdate,
@@ -1298,7 +1009,6 @@ function StaffCardEditing({
     );
 }
 
-// ── Carte staff — mode affichage ───────────────────────────────────
 function StaffCardDisplay({
     staff,
     rattachementLabel,
@@ -1308,7 +1018,7 @@ function StaffCardDisplay({
 }) {
     return (
         <div
-            className={`flex items-center justify-between rounded-xl px-4 py-3 group transition-colors
+            className={`flex items-center justify-between rounded-xl px-4 py-3 transition-colors
       ${hasError ? "bg-red-50 border border-red-300" : "bg-gray-50 border border-gray-200 hover:border-gray-300"}`}
         >
             <div className="flex items-center gap-3 min-w-0">
@@ -1332,7 +1042,6 @@ function StaffCardDisplay({
                     type="button"
                     onClick={onEdit}
                     className="text-xs text-blue-500 hover:text-blue-700 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
-                    aria-label="Modifier"
                 >
                     ✎
                 </button>
@@ -1340,7 +1049,6 @@ function StaffCardDisplay({
                     type="button"
                     onClick={onRemove}
                     className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50 transition-colors"
-                    aria-label="Supprimer"
                 >
                     ✕
                 </button>
@@ -1361,7 +1069,7 @@ function Section({ title, children }) {
     );
 }
 
-function Field({ label, hint, error, children, optional = false }) {
+function Field({ label, error, children, optional = false }) {
     return (
         <div className="space-y-1">
             <label className="block text-sm font-medium text-gray-700">
@@ -1372,9 +1080,6 @@ function Field({ label, hint, error, children, optional = false }) {
                     </span>
                 )}
             </label>
-            {hint && (
-                <p className="text-xs text-gray-400 leading-relaxed">{hint}</p>
-            )}
             {children}
             {error && (
                 <p className="text-xs text-red-500" role="alert">

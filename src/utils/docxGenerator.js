@@ -53,17 +53,17 @@ export const slug = (str) =>
         .replace(/_+/g, "_")
         .slice(0, 40);
 
-const zoneResponsible = (zone) =>
-    fullName(zone.responsibleNom, zone.responsiblePrenom) || "Non défini";
-
-const getCrisisCell = (config) => {
-    const { nom, prenom, fonction } = config.crisisCell ?? {};
-    if (!nom?.trim()) return "Non défini";
+const getCrisisCell = (config, teacherByClass = {}, staffById = {}) => {
+    const adult = resolveAdult(config.crisisCell, teacherByClass, staffById);
+    if (!adult) return "Non défini";
     const extra =
         config.staff?.filter((s) => s.rattachement === "cellule") ?? [];
-    const base = fullName(nom, prenom) + (fonction ? ` (${fonction})` : "");
-    if (extra.length === 0) return base;
-    return base + ` + ${extra.length} autre${extra.length > 1 ? "s" : ""}`;
+    const base =
+        fullName(adult.nom, adult.prenom) +
+        (config.crisisCell.fonction ? ` (${config.crisisCell.fonction})` : "");
+    return extra.length > 0
+        ? `${base} + ${extra.length} autre${extra.length > 1 ? "s" : ""}`
+        : base;
 };
 
 const getClassStaff = (config, classe) =>
@@ -155,6 +155,97 @@ const makeSection = (children, isLast = false) => ({
     children,
 });
 
+// ── Helpers de résolution ──────────────────────────────────────────
+
+/** Résout un objet adulte (crisisCell ou zoneResponsible) en { nom, prenom, fonction } */
+function resolveAdult(adultConfig, teacherByClass, staffById) {
+    if (!adultConfig) return null;
+    if (adultConfig.source === "teacher") {
+        const name = teacherByClass[adultConfig.teacherClass];
+        if (!name) return null;
+        return {
+            nom: name,
+            prenom: "",
+            fonction: adultConfig.fonction || "Enseignant(e)",
+        };
+    }
+    if (adultConfig.source === "staff") {
+        const s = staffById[adultConfig.staffId];
+        if (!s) return null;
+        return {
+            nom: s.nom,
+            prenom: s.prenom,
+            fonction: adultConfig.fonction || s.fonction || "",
+        };
+    }
+    // manual
+    if (!adultConfig.nom?.trim()) return null;
+    return {
+        nom: adultConfig.nom,
+        prenom: adultConfig.prenom || "",
+        fonction: adultConfig.fonction || "",
+    };
+}
+
+/** Résout un substitut en { nom, prenom, fonction } */
+function resolveSubstitute(substitute, staffById) {
+    if (!substitute) return null;
+    if (substitute.source === "staff") {
+        const s = staffById[substitute.staffId];
+        if (!s) return null;
+        return {
+            nom: s.nom,
+            prenom: s.prenom,
+            fonction: substitute.fonction || s.fonction || "",
+        };
+    }
+    if (!substitute.nom?.trim()) return null;
+    return {
+        nom: substitute.nom,
+        prenom: substitute.prenom || "",
+        fonction: substitute.fonction || "",
+    };
+}
+
+/** Nom d'affichage du responsable de zone pour les en-têtes */
+function getZoneResponsibleName(zone, config, teacherByClass, staffById) {
+    const resp = config.zoneResponsibles?.[zone.id];
+    const adult = resolveAdult(resp, teacherByClass, staffById);
+    return adult ? fullName(adult.nom, adult.prenom) : "Non défini";
+}
+
+/**
+ * Retourne les infos de substitution pour une classe donnée,
+ * en inspectant crisisCell et zoneResponsibles.
+ * @returns { mission, teacherNom, sub: { nom, prenom, fonction } } | null
+ */
+function getClassSubstitute(classe, config, teacherByClass, staffById) {
+    // Vérifier cellule de crise
+    const cc = config.crisisCell;
+    if (cc?.source === "teacher" && cc?.teacherClass === classe) {
+        return {
+            mission: cc.fonction || "Cellule de crise",
+            teacherNom: teacherByClass[classe] || "",
+            sub: resolveSubstitute(cc.substitute, staffById),
+        };
+    }
+    // Vérifier chaque responsable de zone
+    for (const [zoneId, resp] of Object.entries(
+        config.zoneResponsibles || {}
+    )) {
+        if (resp?.source === "teacher" && resp?.teacherClass === classe) {
+            const zone = config.zones.find((z) => z.id === zoneId);
+            return {
+                mission:
+                    resp.fonction || `Responsable zone ${zone?.name || ""}`,
+                teacherNom: teacherByClass[classe] || "",
+                sub: resolveSubstitute(resp.substitute, staffById),
+            };
+        }
+    }
+    return null;
+}
+
 // ── En-tête et pied ────────────────────────────────────────────────
 function makeDocHeader(schoolName, title, lines = []) {
     return [
@@ -226,7 +317,15 @@ const makeDateLine = () =>
 
 // ── Constructeurs de contenu ───────────────────────────────────────
 
-function makeAdultsChildren(zone, zoneStaff, blankRows, schoolName) {
+function makeAdultsChildren(
+    zone,
+    zoneStaff,
+    blankRows,
+    schoolName,
+    config,
+    teacherByClass,
+    staffById
+) {
     const W = [2200, 1800, 2200, 1200, 700, 700, 700, 700];
     const COLS = [
         "NOM",
@@ -239,18 +338,14 @@ function makeAdultsChildren(zone, zoneStaff, blankRows, schoolName) {
         "BLESSÉ",
     ];
 
-    // ✅ Responsable de zone en tête de liste, s'il est renseigné
-    const responsible = zone.responsibleNom?.trim()
-        ? [
-              {
-                  nom: zone.responsibleNom,
-                  prenom: zone.responsiblePrenom || "",
-                  fonction: "Responsable de zone",
-              },
-          ]
+    // Responsable de zone en 1re ligne
+    const resp = config.zoneResponsibles?.[zone.id];
+    const responsible = resolveAdult(resp, teacherByClass, staffById);
+    const respRow = responsible
+        ? [{ ...responsible, fonction: resp.fonction || "Responsable de zone" }]
         : [];
 
-    const allAdults = [...responsible, ...zoneStaff];
+    const allAdults = [...respRow, ...zoneStaff];
 
     const staffRows = allAdults.map((s) =>
         tableRow([
@@ -281,7 +376,7 @@ function makeAdultsChildren(zone, zoneStaff, blankRows, schoolName) {
 
     return [
         ...makeDocHeader(schoolName, `ADULTES — ${zone.name.toUpperCase()}`, [
-            `Responsable de zone : ${fullName(zone.responsibleNom, zone.responsiblePrenom)}`,
+            `Responsable de zone : ${getZoneResponsibleName(zone, config, teacherByClass, staffById)}`,
             "Compléter les lignes vierges avec les intervenants présents le jour J",
         ]),
         makeTable([
@@ -324,9 +419,9 @@ function makeClassChildren(
     classStaff,
     zone,
     schoolName,
-    override = null,
-    staffById = {},
-    config = null
+    config,
+    teacherByClass,
+    staffById
 ) {
     const WA = [2200, 1800, 2200, 800, 800, 800, 800];
     const COLS_A = [
@@ -339,43 +434,35 @@ function makeClassChildren(
         "BLESSÉ",
     ];
 
-    // ── Construction de la liste d'adultes ──
+    const substituteInfo = getClassSubstitute(
+        classe,
+        config,
+        teacherByClass,
+        staffById
+    );
+    const extras = (config?.classExtraTeachers?.[classe] || []).filter((et) =>
+        et.nom.trim()
+    );
+
     const allAdults = [];
 
     if (teacher) {
-        if (override?.teacherUnavailable) {
-            // Enseignant absent du groupe → ligne grisée barrée
+        if (substituteInfo) {
+            // Enseignant absent → ligne grisée + barrée
             allAdults.push({
                 nom: teacher,
                 prenom: "",
+                fonction: substituteInfo.mission,
                 muted: true,
-                fonction: "Absent(e) du groupe — mission PPMS",
             });
-
-            // Adulte substitut
-            let sub = null;
-            if (
-                override.substituteSource === "staff" &&
-                override.substituteStaffId
-            ) {
-                const s = staffById[override.substituteStaffId];
-                if (s)
-                    sub = {
-                        nom: s.nom,
-                        prenom: s.prenom,
-                        fonction: `${s.fonction || ""} — encadrant(e) PPMS`,
-                    };
-            } else if (
-                override.substituteSource === "manual" &&
-                override.substituteNom
-            ) {
-                sub = {
-                    nom: override.substituteNom,
-                    prenom: override.substitutePrenom || "",
-                    fonction: `${override.substituteFonction || ""} — encadrant(e) PPMS`,
-                };
+            // Substitut actif
+            if (substituteInfo.sub) {
+                allAdults.push({
+                    ...substituteInfo.sub,
+                    fonction: `${substituteInfo.sub.fonction || ""}${substituteInfo.sub.fonction ? " — " : ""}encadrant(e) PPMS`,
+                    muted: false,
+                });
             }
-            if (sub) allAdults.push({ ...sub, muted: false });
         } else {
             allAdults.push({
                 nom: teacher,
@@ -385,19 +472,18 @@ function makeClassChildren(
             });
         }
     }
-    const extraTeachers = (config?.classExtraTeachers?.[classe] || []).filter(
-        (et) => et.nom.trim()
+
+    // Co-titulaires / décharges
+    extras.forEach((et) =>
+        allAdults.push({
+            nom: et.nom,
+            prenom: et.prenom || "",
+            fonction: et.fonction || "Décharge",
+            muted: false,
+        })
     );
 
-    // Dans allAdults, après le bloc teacher/override :
-    allAdults.push(
-        ...extraTeachers.map((et) => ({
-            nom: et.nom,
-            prenom: et.prenom,
-            fonction: et.fonction || "Décharge",
-            muted: false, // toujours actif avec cases à cocher
-        }))
-    );
+    // Staff rattaché à cette classe
     allAdults.push(
         ...classStaff.map((s) => ({
             nom: s.nom,
@@ -415,18 +501,12 @@ function makeClassChildren(
             cell(a.prenom, { adult: !a.muted, muted: a.muted, w: WA[1] }),
             cell(a.fonction, { adult: !a.muted, muted: a.muted, w: WA[2] }),
             ...(a.muted
-                ? [
-                      cell("—", { muted: true, center: true, w: WA[3] }),
-                      cell("—", { muted: true, center: true, w: WA[4] }),
-                      cell("—", { muted: true, center: true, w: WA[5] }),
-                      cell("—", { muted: true, center: true, w: WA[6] }),
-                  ]
-                : [
-                      cell(BOX, { adult: true, center: true, w: WA[3] }),
-                      cell(BOX, { adult: true, center: true, w: WA[4] }),
-                      cell(BOX, { adult: true, center: true, w: WA[5] }),
-                      cell(BOX, { adult: true, center: true, w: WA[6] }),
-                  ]),
+                ? WA.slice(3).map((w) =>
+                      cell("—", { muted: true, center: true, w })
+                  )
+                : WA.slice(3).map((w) =>
+                      cell(BOX, { adult: true, center: true, w })
+                  )),
         ])
     );
 
@@ -447,7 +527,7 @@ function makeClassChildren(
     return [
         ...makeDocHeader(schoolName, "FICHE DE RECENSEMENT", [
             `Classe : ${classe}`,
-            `Zone : ${zone.name}   |   Responsable de zone : ${zoneResponsible(zone)}`,
+            `Zone : ${zone.name}   |   Responsable : ${getZoneResponsibleName(zone, config, teacherByClass, staffById)}`,
         ]),
         sectionTitle(
             `Adultes (${activeAdults.length} actif${activeAdults.length > 1 ? "s" : ""})`
@@ -786,6 +866,7 @@ function makeZoneSummaryChildren(
 }
 
 function makeGlobalSummaryChildren(config, byClass, teacherByClass, classes) {
+    const staffById = Object.fromEntries(config.staff.map((s) => [s.id, s]));
     const { zones, classZoneMap } = config;
     const multiZone = zones.length > 1;
     const totalStudents = classes.reduce(
@@ -825,11 +906,22 @@ function makeGlobalSummaryChildren(config, byClass, teacherByClass, classes) {
         const zoneObj = multiZone
             ? zones.find((z) => z.id === classZoneMap[cl]) || zones[0]
             : zones[0];
+        const override = getClassSubstitute(
+            cl,
+            config,
+            teacherByClass,
+            staffById
+        );
+        const teacherDisplay = teacherByClass[cl]
+            ? override
+                ? `(${teacherByClass[cl]} — ${override.mission})`
+                : teacherByClass[cl]
+            : "";
         const base = multiZone
             ? [
                   cell(zoneObj.name, { alt: i % 2 !== 0, w: W[0] }),
                   cell(cl, { alt: i % 2 !== 0, w: W[1] }),
-                  cell(teacherByClass[cl] || "", { alt: i % 2 !== 0, w: W[2] }),
+                  cell(teacherDisplay, { alt: i % 2 !== 0, w: W[2] }),
                   cell(String(byClass[cl]?.length ?? 0), {
                       alt: i % 2 !== 0,
                       center: true,
@@ -838,7 +930,7 @@ function makeGlobalSummaryChildren(config, byClass, teacherByClass, classes) {
               ]
             : [
                   cell(cl, { alt: i % 2 !== 0, w: W[0] }),
-                  cell(teacherByClass[cl] || "", { alt: i % 2 !== 0, w: W[1] }),
+                  cell(teacherDisplay, { alt: i % 2 !== 0, w: W[1] }),
                   cell(String(byClass[cl]?.length ?? 0), {
                       alt: i % 2 !== 0,
                       center: true,
@@ -874,18 +966,12 @@ function makeGlobalSummaryChildren(config, byClass, teacherByClass, classes) {
 
     return [
         ...makeDocHeader(config.schoolName, "SYNTHÈSE CELLULE DE CRISE", [
-            `Responsable cellule de crise : ${getCrisisCell(config)}`,
+            `Responsable cellule de crise : ${getCrisisCell(config, teacherByClass, staffById)}`,
         ]),
-
-        // ✅ Table des adultes de la cellule de crise
-        ...makeCrisisCellAdultsChildren(config),
-
-        // Séparateur visuel
+        ...makeCrisisCellAdultsChildren(config, teacherByClass, staffById),
         para([run("─".repeat(60), { color: "CCCCCC" })], {
             spacing: { before: 200, after: 200 },
         }),
-
-        // Tableau de synthèse classes/élèves existant
         makeTable([
             tableRow(
                 COLS.map((c, i) =>
@@ -911,7 +997,7 @@ function makeGlobalSummaryChildren(config, byClass, teacherByClass, classes) {
     ];
 }
 
-function makeCrisisCellAdultsChildren(config) {
+function makeCrisisCellAdultsChildren(config, teacherByClass, staffById) {
     const WA = [2200, 1800, 2800, 800, 800, 800, 800];
     const COLS_A = [
         "NOM",
@@ -923,11 +1009,17 @@ function makeCrisisCellAdultsChildren(config) {
         "BLESSÉ",
     ];
 
-    // Directeur/trice (toujours en premier)
-    const { nom, prenom, fonction } = config.crisisCell;
+    // Responsable principal
+    const ccAdult = resolveAdult(config.crisisCell, teacherByClass, staffById);
     const crisisStaff = [
-        { nom, prenom, fonction: fonction || "Directeur/trice" },
-        // Autres membres rattachés à la cellule
+        ...(ccAdult
+            ? [
+                  {
+                      ...ccAdult,
+                      fonction: config.crisisCell.fonction || "Directeur/trice",
+                  },
+              ]
+            : []),
         ...config.staff
             .filter((s) => s.rattachement === "cellule")
             .map((s) => ({
@@ -935,7 +1027,7 @@ function makeCrisisCellAdultsChildren(config) {
                 prenom: s.prenom,
                 fonction: s.fonction || "",
             })),
-    ].filter((a) => a.nom.trim()); // sécurité : ignorer les lignes vides
+    ].filter((a) => a.nom.trim());
 
     const rows = crisisStaff.map((a) =>
         tableRow([
@@ -989,7 +1081,10 @@ function buildZoneDocument(
             zone,
             getZoneStaff(config, zone.id),
             config.blankIntervenantRows,
-            config.schoolName
+            config.schoolName,
+            config,
+            teacherByClass,
+            staffById
         ),
         ...classesInZone.map((cl) =>
             makeClassChildren(
@@ -999,9 +1094,9 @@ function buildZoneDocument(
                 getClassStaff(config, cl),
                 zone,
                 config.schoolName,
-                config.classOverrides?.[cl] || null,
-                staffById,
-                config
+                config,
+                teacherByClass,
+                staffById
             )
         ),
     ];
