@@ -6,12 +6,9 @@ import { cx } from "./ui/cx";
 import AdultSelector from "./AdultSelector";
 import CrisisCellSection from "./config-form/CrisisCellSection";
 import ClassSupervisionSection from "./config-form/ClassSupervisionSection";
-import ExtraTeachersSection from "./config-form/ExtraTeachersSection";
-import StaffCardDisplay from "./config-form/StaffCardDisplay";
 import { useConfigForm } from "../hooks/useConfigForm";
 import { emptyAdult } from "../utils/config/defaults";
 import { getAdultId } from "../utils/config/adultId";
-import { getRattachementLabel } from "../utils/config/rattachement";
 
 export default function ConfigForm({
     classes,
@@ -36,18 +33,10 @@ export default function ConfigForm({
     const docCount = (config.configType === "A" ? 1 : config.zones.length) + 1;
     const hasErrors = Object.keys(errors).length > 0;
 
-    const extrasCount = Object.values(config.classExtraTeachers || {}).reduce(
-        (acc, arr) => acc + (arr?.filter((et) => et.nom.trim()).length || 0),
-        0
-    );
-
     const summaryParts = [
         config.schoolName || "École non définie",
         `Option ${config.configType}`,
         `${config.zones.length} zone${config.zones.length > 1 ? "s" : ""}`,
-        extrasCount > 0
-            ? `${extrasCount} décharge${extrasCount > 1 ? "s" : ""}`
-            : null,
         vacancies.length > 0
             ? `${vacancies.length} vacance${vacancies.length > 1 ? "s" : ""}`
             : null,
@@ -388,81 +377,6 @@ export default function ConfigForm({
                     />
                 </Section>
             )}
-
-            {/* ── 7. Co-titulaires et décharges ───────────────────────── */}
-            <Section title="Co-titulaires et décharges">
-                <ExtraTeachersSection
-                    classes={classes}
-                    teacherByClass={teacherByClass}
-                    classExtraTeachers={config.classExtraTeachers || {}}
-                    onAdd={form.addExtraTeacher}
-                    onUpdate={form.updateExtraTeacher}
-                    onRemove={form.removeExtraTeacher}
-                    extrasCount={extrasCount}
-                />
-            </Section>
-
-            {/* ── 8. Autres adultes — lecture seule ───────────────────── */}
-            <Section title="Autres adultes">
-                <p className="text-sm text-gray-500">
-                    AESH, ATSEM, entretien, service civique… déclarés à l'étape
-                    précédente. Ces adultes sont disponibles comme responsables
-                    de zone ou superviseurs de classe.
-                </p>
-
-                {config.staff.length > 0 ? (
-                    <div className="space-y-2 mt-3">
-                        {config.staff.map((s) => (
-                            <StaffCardDisplay
-                                key={s.id}
-                                staff={s}
-                                rattachementLabel={getRattachementLabel(
-                                    s.rattachement,
-                                    config.zones
-                                )}
-                                hasError={false}
-                                // Pas de onEdit / onRemove — lecture seule à cette étape
-                            />
-                        ))}
-                    </div>
-                ) : (
-                    <div className="mt-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-3">
-                        <span className="text-gray-400 text-lg">👤</span>
-                        <p className="text-sm text-gray-500">
-                            Aucun adulte déclaré.{" "}
-                            <button
-                                type="button"
-                                onClick={onBack}
-                                className="text-blue-700 hover:underline"
-                            >
-                                Retourner à l'étape précédente
-                            </button>{" "}
-                            pour en ajouter.
-                        </p>
-                    </div>
-                )}
-
-                {/* Lignes vierges — reste configurable ici */}
-                <div className="flex items-center gap-3 mt-4 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
-                    <label className="text-sm text-gray-600 flex-1">
-                        Lignes vierges pour intervenants / personnels variables
-                        du jour
-                    </label>
-                    <input
-                        type="number"
-                        min="0"
-                        max="20"
-                        value={config.blankIntervenantRows}
-                        onChange={(e) =>
-                            form.setField(
-                                "blankIntervenantRows",
-                                Math.max(0, parseInt(e.target.value) || 0)
-                            )
-                        }
-                        className="w-16 rounded-lg border border-gray-300 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 text-center"
-                    />
-                </div>
-            </Section>
 
             {/* ── Barre sticky ────────────────────────────────────────── */}
             <div className="sticky bottom-0 z-10 -mx-6 px-6 py-4 bg-white/95 backdrop-blur-sm border-t border-gray-200 shadow-[0_-2px_8px_rgba(0,0,0,0.08)]">
