@@ -46,10 +46,6 @@ export default function NormalizationStep({
                         <strong>4. Autres adultes</strong> — AESH, ATSEM, Maître
                         E, intervenants réguliers…
                     </p>
-                    <p className="text-xs text-blue-700 bg-blue-100 rounded-lg px-3 py-2 mt-1">
-                        💡 L'affectation PPMS (zones, cellule de crise) se fait
-                        à l'étape suivante.
-                    </p>
                 </div>
             </StepHelp>
 

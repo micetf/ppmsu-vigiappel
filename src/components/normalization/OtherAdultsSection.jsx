@@ -34,10 +34,6 @@ export default function OtherAdultsSection({
                 intervenants réguliers… Indiquer leur classe de rattachement
                 habituelle si applicable.
             </p>
-            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
-                ℹ️ L'affectation PPMS (zone, cellule de crise) se fera à l'étape
-                suivante.
-            </p>
 
             <div className="mt-4 space-y-2">
                 {staff.map((s) => (
