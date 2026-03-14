@@ -102,7 +102,7 @@ export default function ConfigForm({
 
             <div>
                 <h2 className="text-lg font-semibold text-gray-800 mb-1">
-                    Étape 3 – Configuration des fiches
+                    Étape 4 – Configuration des fiches
                 </h2>
                 <p className="text-sm text-gray-500">
                     Modèle Eduscol PPMS, fascicule 2, février 2024.
