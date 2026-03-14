@@ -1,18 +1,33 @@
+/**
+ * ConfigForm.jsx
+ * ──────────────
+ * Étape de configuration PPMS (étape 4 dans le workflow).
+ *
+ * Évolution Sprint 5 :
+ * - Section cellule de crise : remplacée par <CrisisCellSection>
+ *   (responsable + membres, badges vacance, R1 via excludeIds)
+ * - Section supervision : <ClassSupervisionSection> conditionnelle
+ *   (affichée dès qu'une vacance existe, R4 bloquant)
+ * - Responsables de zone : showSubstitute supprimé d'AdultSelector
+ *   (la supervision est centralisée dans ClassSupervisionSection)
+ * - Bouton "Générer" désactivé si des erreurs sont présentes
+ * - Suppression de tous les marqueurs COMPAT (crisisCell, substitute)
+ */
+
 import { useState } from "react";
 import StepHelp from "./StepHelp";
 import Section from "./ui/Section";
 import Field from "./ui/Field";
 import { cx } from "./ui/cx";
 import AdultSelector from "./AdultSelector";
-import ExtraTeachersSection from "./normalization/ExtraTeachersSection";
+import CrisisCellSection from "./config-form/CrisisCellSection";
+import ClassSupervisionSection from "./config-form/ClassSupervisionSection";
+import ExtraTeachersSection from "./config-form/ExtraTeachersSection";
 import StaffCardEditing from "./config-form/StaffCardEditing";
 import StaffCardDisplay from "./config-form/StaffCardDisplay";
 import { useConfigForm } from "../hooks/useConfigForm";
-import {
-    emptyAdult,
-    FONCTIONS_CRISE,
-    FONCTIONS_ZONE,
-} from "../utils/config/defaults";
+import { emptyAdult, FONCTIONS_ZONE } from "../utils/config/defaults";
+import { getAdultId } from "../utils/config/adultId";
 import {
     getRattachementLabel,
     buildRattachementOptions,
@@ -29,7 +44,7 @@ export default function ConfigForm({
     const [showFormatOptions, setShowFormatOptions] = useState(false);
     const [editingStaffIds, setEditingStaffIds] = useState(new Set());
 
-    const { config, errors, isRestored, reset } = form; // alias locaux pour lisibilité du JSX
+    const { config, errors, isRestored, reset, vacancies, assignedIds } = form;
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -38,15 +53,19 @@ export default function ConfigForm({
             setEditingStaffIds((prev) => new Set([...prev, ...staffInError]));
     };
 
-    // ── Dérivés ────────────────────────────────────────────────────
+    // ── Dérivés ────────────────────────────────────────────────────────────
     const multiZone = config.zones.length > 1;
     const showClassMap = config.configType === "B" && multiZone;
     const docCount = (config.configType === "A" ? 1 : config.zones.length) + 1;
+    const hasErrors = Object.keys(errors).length > 0;
+
     const extrasCount = Object.values(config.classExtraTeachers || {}).reduce(
         (acc, arr) => acc + (arr?.filter((et) => et.nom.trim()).length || 0),
         0
     );
+
     const rattachementOptions = buildRattachementOptions(config.zones, classes);
+
     const summaryParts = [
         config.schoolName || "École non définie",
         `Option ${config.configType}`,
@@ -54,13 +73,18 @@ export default function ConfigForm({
         extrasCount > 0
             ? `${extrasCount} décharge${extrasCount > 1 ? "s" : ""}`
             : null,
+        vacancies.length > 0
+            ? `${vacancies.length} vacance${vacancies.length > 1 ? "s" : ""}`
+            : null,
         `→ ${docCount} doc${docCount > 1 ? "s" : ""}`,
     ]
         .filter(Boolean)
         .join("  ·  ");
 
+    // ── Rendu ──────────────────────────────────────────────────────────────
     return (
         <form onSubmit={handleSubmit} noValidate className="space-y-8 pb-28">
+            {/* ── Bannière restauration ───────────────────────────────── */}
             {isRestored && (
                 <div className="flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
                     <div className="flex items-center gap-2 text-sm text-amber-800">
@@ -73,48 +97,21 @@ export default function ConfigForm({
                     <button
                         type="button"
                         onClick={reset}
-                        className="text-xs text-amber-700 hover:text-amber-900 underline shrink-0 transition-colors"
+                        className="text-xs text-amber-700 hover:text-amber-900 underline shrink-0"
                     >
-                        Effacer et recommencer
+                        Réinitialiser
                     </button>
                 </div>
             )}
 
-            <StepHelp
-                stepKey="step3"
-                title="Comment remplir cette configuration ?"
-            >
-                <div className="pt-3 space-y-2 text-sm">
-                    <p>
-                        <strong>🏫 Votre école</strong> — Nom et identité du/de
-                        la responsable de la cellule de crise.
-                    </p>
-                    <p>
-                        <strong>📍 Zones</strong> — Pour chaque zone, indiquer
-                        le lieu et son responsable.
-                    </p>
-                    <p>
-                        <strong>👥 Autres adultes</strong> — AESH, ATSEM,
-                        entretien… Les enseignants viennent du CSV.
-                    </p>
-                </div>
-            </StepHelp>
-
-            <div>
-                <h2 className="text-lg font-semibold text-gray-800 mb-1">
-                    Étape 4 – Configuration des fiches
-                </h2>
-                <p className="text-sm text-gray-500">
-                    Modèle Eduscol PPMS, fascicule 2, février 2024.
-                </p>
-            </div>
+            <StepHelp step={4} />
 
             {/* ── 1. École ────────────────────────────────────────────── */}
-            <Section title="Votre école">
+            <Section title="École">
                 <Field label="Nom de l'école" error={errors.schoolName}>
                     <input
                         type="text"
-                        placeholder="École élémentaire Jules Ferry"
+                        placeholder="École élémentaire Jean Moulin"
                         value={config.schoolName}
                         onChange={(e) =>
                             form.setField("schoolName", e.target.value)
@@ -122,30 +119,6 @@ export default function ConfigForm({
                         className={cx(errors.schoolName)}
                     />
                 </Field>
-                <div className="border-2 border-blue-800 rounded-xl p-4 space-y-3 bg-blue-50">
-                    <div className="flex items-center justify-between">
-                        <p className="text-sm font-bold text-blue-900">
-                            🔒 Responsable de la cellule de crise
-                        </p>
-                        <span className="text-xs font-semibold text-blue-800 bg-blue-200 px-2 py-0.5 rounded-full">
-                            Obligatoire
-                        </span>
-                    </div>
-                    <p className="text-xs text-blue-700 leading-relaxed">
-                        Pilote la cellule de crise : appels aux secours (112,
-                        IEN, mairie), centralise les bilans.
-                    </p>
-                    <AdultSelector
-                        value={config.crisisCell}
-                        onChange={(v) => form.setField("crisisCell", v)}
-                        teachers={teacherByClass}
-                        staff={config.staff}
-                        fonctionOptions={FONCTIONS_CRISE}
-                        showSubstitute={true}
-                        substituteTitle="Qui encadrera cette classe pendant le PPMS ?"
-                        error={errors.crisisCell}
-                    />
-                </div>
             </Section>
 
             {/* ── 2. Format ───────────────────────────────────────────── */}
@@ -188,19 +161,19 @@ export default function ConfigForm({
                                 — l'option B est recommandée.
                             </p>
                         )}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             {[
                                 {
                                     id: "A",
                                     icon: "📄",
                                     label: "Option A — Fiche unique",
-                                    desc: "Tous les élèves sur un même document. Adapté pour les petites écoles (≤ 3 classes).",
+                                    desc: "Tous les élèves et adultes sur un seul document. Adapté aux petites écoles.",
                                 },
                                 {
                                     id: "B",
                                     icon: "📋",
                                     label: "Option B — Fiche par classe",
-                                    desc: "1 fiche par enseignant + 1 fiche adultes par zone + 1 synthèse cellule de crise.",
+                                    desc: "1 fiche par enseignant + synthèse cellule de crise. Recommandé au-delà de 3 classes.",
                                 },
                             ].map((opt) => (
                                 <button
@@ -210,12 +183,21 @@ export default function ConfigForm({
                                         form.setField("configType", opt.id);
                                         setShowFormatOptions(false);
                                     }}
-                                    className={`text-left rounded-xl border-2 p-4 transition-all outline-none focus-visible:ring-2 focus-visible:ring-blue-500
-                                        ${config.configType === opt.id ? "border-blue-700 bg-blue-50" : "border-gray-200 bg-white hover:border-blue-300"}`}
+                                    className={`text-left rounded-xl border-2 p-4 transition-colors
+                                        ${
+                                            config.configType === opt.id
+                                                ? "border-blue-700 bg-blue-50"
+                                                : "border-gray-200 bg-white hover:border-blue-300"
+                                        }`}
                                 >
                                     <div className="flex items-center gap-2 mb-1.5">
                                         <span
-                                            className={`w-4 h-4 rounded-full border-2 shrink-0 ${config.configType === opt.id ? "border-blue-700 bg-blue-700" : "border-gray-300"}`}
+                                            className={`w-4 h-4 rounded-full border-2 shrink-0
+                                            ${
+                                                config.configType === opt.id
+                                                    ? "border-blue-700 bg-blue-700"
+                                                    : "border-gray-300"
+                                            }`}
                                         />
                                         <span className="text-base">
                                             {opt.icon}
@@ -241,7 +223,19 @@ export default function ConfigForm({
                 )}
             </Section>
 
-            {/* ── 3. Zones ────────────────────────────────────────────── */}
+            {/* ── 3. Cellule de crise ─────────────────────────────────── */}
+            <Section title="Cellule de crise">
+                <CrisisCellSection
+                    crisis={config.crisis}
+                    onChange={(crisis) => form.setField("crisis", crisis)}
+                    teachers={teacherByClass}
+                    staff={config.staff}
+                    assignedIds={assignedIds}
+                    errors={errors}
+                />
+            </Section>
+
+            {/* ── 4. Zones de mise en sûreté ──────────────────────────── */}
             <Section title="Zones de mise en sûreté">
                 <div className="space-y-4">
                     {config.zones.map((zone, idx) => (
@@ -263,6 +257,7 @@ export default function ConfigForm({
                                     </button>
                                 )}
                             </div>
+
                             <Field
                                 label="Lieu de confinement"
                                 error={errors[`zone_${zone.id}_name`]}
@@ -282,6 +277,7 @@ export default function ConfigForm({
                                     )}
                                 />
                             </Field>
+
                             <div className="bg-white border border-gray-200 rounded-lg p-3 space-y-2">
                                 <div>
                                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
@@ -306,8 +302,15 @@ export default function ConfigForm({
                                     teachers={teacherByClass}
                                     staff={config.staff}
                                     fonctionOptions={FONCTIONS_ZONE}
-                                    showSubstitute={true}
-                                    substituteTitle="Qui encadrera la classe pendant le PPMS ?"
+                                    excludeIds={[...assignedIds].filter(
+                                        (id) =>
+                                            id !==
+                                            getAdultId(
+                                                config.zoneResponsibles?.[
+                                                    zone.id
+                                                ]
+                                            )
+                                    )}
                                     error={
                                         errors[`zone_${zone.id}_responsible`]
                                     }
@@ -332,7 +335,7 @@ export default function ConfigForm({
                 </div>
             </Section>
 
-            {/* ── 4. Affectation classes → zones ──────────────────────── */}
+            {/* ── 5. Affectation classes → zones ──────────────────────── */}
             {showClassMap && (
                 <Section title="Affectation des classes aux zones">
                     <p className="text-sm text-gray-500 mb-3">
@@ -370,7 +373,22 @@ export default function ConfigForm({
                 </Section>
             )}
 
-            {/* ── 5. Co-titulaires ────────────────────────────────────── */}
+            {/* ── 6. Supervision des classes vacantes ─────────────────── */}
+            {vacancies.length > 0 && (
+                <Section title="⚠️ Supervision des classes">
+                    <ClassSupervisionSection
+                        vacancies={vacancies}
+                        classSupervision={config.classSupervision ?? {}}
+                        onChange={form.setSupervision}
+                        teachers={teacherByClass}
+                        config={config}
+                        assignedIds={assignedIds}
+                        errors={errors}
+                    />
+                </Section>
+            )}
+
+            {/* ── 7. Co-titulaires et décharges ───────────────────────── */}
             <Section title="Co-titulaires et décharges">
                 <ExtraTeachersSection
                     classes={classes}
@@ -383,12 +401,12 @@ export default function ConfigForm({
                 />
             </Section>
 
-            {/* ── 6. Autres adultes ───────────────────────────────────── */}
+            {/* ── 8. Autres adultes ───────────────────────────────────── */}
             <Section title="Autres adultes">
                 <p className="text-sm text-gray-500">
-                    AESH, ATSEM, entretien, service civique… Les membres de la
-                    cellule de crise peuvent être rattachés à{" "}
-                    <strong>"Cellule de crise"</strong>.
+                    AESH, ATSEM, entretien, service civique… Ils peuvent être
+                    désignés comme superviseurs de classe ou responsables de
+                    zone.
                 </p>
                 {config.staff.length > 0 && (
                     <div className="space-y-2 mt-1">
@@ -471,6 +489,14 @@ export default function ConfigForm({
                 <p className="text-xs text-gray-400 mb-2 truncate">
                     {summaryParts}
                 </p>
+                {hasErrors && (
+                    <p className="text-xs text-red-600 mb-2 flex items-center gap-1.5">
+                        <span aria-hidden="true">⚠️</span>
+                        {Object.keys(errors).length} point
+                        {Object.keys(errors).length > 1 ? "s" : ""} à corriger
+                        avant de générer.
+                    </p>
+                )}
                 <div className="flex flex-wrap gap-3">
                     <button
                         type="button"
@@ -481,7 +507,13 @@ export default function ConfigForm({
                     </button>
                     <button
                         type="submit"
-                        className="px-6 py-2 text-sm bg-blue-800 text-white rounded-lg hover:bg-blue-900 font-medium transition-colors"
+                        disabled={hasErrors}
+                        className={`px-6 py-2 text-sm rounded-lg font-medium transition-colors
+                            ${
+                                hasErrors
+                                    ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                                    : "bg-blue-800 text-white hover:bg-blue-900"
+                            }`}
                     >
                         Générer les fiches →
                     </button>
