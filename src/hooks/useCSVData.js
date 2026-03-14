@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { groupByClass } from "../utils/csvParser";
 
 export function useCSVData(csvResult) {
-    // ← useMemo sur les deux primitives pour stabiliser les références
     const data = useMemo(() => csvResult?.data ?? [], [csvResult]);
     const fields = useMemo(() => csvResult?.fields ?? [], [csvResult]);
 
@@ -20,12 +19,16 @@ export function useCSVData(csvResult) {
         [byClass, classes]
     );
 
-    return {
-        data,
-        fields,
-        byClass,
-        classes,
-        teacherByClass,
-        totalStudents: data.length,
-    };
+    // ✅ Objet stable : ne change que si l'une des valeurs mémoïsées change
+    return useMemo(
+        () => ({
+            data,
+            fields,
+            byClass,
+            classes,
+            teacherByClass,
+            totalStudents: data.length,
+        }),
+        [data, fields, byClass, classes, teacherByClass]
+    );
 }

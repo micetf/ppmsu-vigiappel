@@ -22,7 +22,7 @@ export default function App() {
     // Mémoïsé : recalculé uniquement quand csvResult change
     const initialNormalized = useMemo(
         () => (csvResult ? normalizeFromCSV(csvData) : null),
-        [csvResult] // csvData est stable si useCSVData mémoïse son résultat
+        [csvData, csvResult]
     );
 
     // ── Handlers ────────────────────────────────────────────────────
