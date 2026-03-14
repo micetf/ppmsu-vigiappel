@@ -73,7 +73,11 @@ export function applyCorrections(csvData, corrections) {
  */
 export function buildPreConfig(corrections) {
     return {
-        staff: corrections.staff ?? [],
+        // "school" → "" : sera affecté à une zone/cellule en étape 4
+        staff: (corrections.staff ?? []).map((s) => ({
+            ...s,
+            rattachement: s.rattachement === "school" ? "" : s.rattachement,
+        })),
         classExtraTeachers: corrections.classExtraTeachers ?? {},
     };
 }

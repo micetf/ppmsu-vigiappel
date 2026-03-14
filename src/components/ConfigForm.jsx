@@ -4,7 +4,7 @@ import Section from "./ui/Section";
 import Field from "./ui/Field";
 import { cx } from "./ui/cx";
 import AdultSelector from "./AdultSelector";
-import ExtraTeachersSection from "./config-form/ExtraTeachersSection";
+import ExtraTeachersSection from "./normalization/ExtraTeachersSection";
 import StaffCardEditing from "./config-form/StaffCardEditing";
 import StaffCardDisplay from "./config-form/StaffCardDisplay";
 import { useConfigForm } from "../hooks/useConfigForm";

@@ -8,6 +8,7 @@ import ConfigForm from "./components/ConfigForm";
 import GenerationPanel from "./components/GenerationPanel";
 import { useCSVData } from "./hooks/useCSVData";
 import { buildPreConfig } from "./utils/normalization";
+import { fullName } from "./utils/formatName";
 import { useNormalization } from "./hooks/useNormalization";
 
 const STORAGE_KEY = "vigiappel_config";
@@ -70,7 +71,20 @@ export default function App() {
 
     // csvData actif = normalisé si disponible, brut sinon
     const activeCsvData = normalizedCsvData ?? csvData;
-    const { classes, teacherByClass } = activeCsvData;
+    const { classes } = activeCsvData;
+    const teacherByClass = activeCsvData.teacherSplitByClass
+        ? Object.fromEntries(
+              classes.map((cl) => [
+                  cl,
+                  fullName(
+                      activeCsvData.teacherSplitByClass[cl]?.nom,
+                      activeCsvData.teacherSplitByClass[cl]?.prenom
+                  ) ||
+                      activeCsvData.teacherByClass[cl] ||
+                      "",
+              ])
+          )
+        : activeCsvData.teacherByClass;
 
     return (
         <div className="min-h-screen bg-gray-50">
