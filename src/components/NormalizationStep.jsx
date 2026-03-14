@@ -12,7 +12,6 @@ export default function NormalizationStep({
 }) {
     const { corrections } = norm;
 
-    // Prévisualisation en temps réel des noms normalisés
     const preview = applyCorrections(csvData, corrections);
 
     const dirtyCount =
@@ -36,13 +35,13 @@ export default function NormalizationStep({
                         libellés du CSV ("Cours Préparatoire" → "CP").
                     </p>
                     <p>
-                        <strong>👩‍🏫 Enseignants</strong> — Ajuster les noms si le
-                        CSV contient des valeurs incomplètes ou erronées.
+                        <strong>👩‍🏫 Enseignants</strong> — Nom et prénom séparés
+                        automatiquement. Corriger si nécessaire.
                     </p>
                     <p>
-                        <strong>👥 Adultes complémentaires</strong> — Déclarer
-                        AESH, ATSEM, co-titulaires, intervenants réguliers… Ils
-                        pré-rempliront la configuration PPMS.
+                        <strong>👥 Adultes complémentaires</strong> — AESH,
+                        ATSEM, co-titulaires… Ils pré-rempliront la
+                        configuration PPMS.
                     </p>
                 </div>
             </StepHelp>
@@ -58,7 +57,8 @@ export default function NormalizationStep({
                     {csvData.totalStudents > 1 ? "s" : ""}
                     {dirtyCount > 0 && (
                         <span className="ml-2 text-blue-700 font-medium">
-                            · {dirtyCount} correction{dirtyCount > 1 ? "s" : ""}
+                            · {dirtyCount} correction
+                            {dirtyCount > 1 ? "s" : ""}
                         </span>
                     )}
                 </p>
@@ -73,10 +73,11 @@ export default function NormalizationStep({
 
             <TeacherNamesSection
                 classes={preview.classes}
-                teacherByClass={preview.teacherByClass}
+                rawTeacherByClass={preview.rawTeacherByClass}
                 corrections={corrections}
-                onSet={norm.setTeacherName}
+                onSetField={norm.setTeacherField} // ← nom exact attendu par le composant
                 onReset={norm.resetTeacherName}
+                onSwap={norm.swapTeacher}
             />
 
             <StaffPreFillSection

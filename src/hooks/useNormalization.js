@@ -1,14 +1,24 @@
 import { useState } from "react";
 import { newStaff } from "../utils/config/defaults";
 import { toNom, toPrenom } from "../utils/formatName";
+import { splitTeacherName } from "../utils/normalization";
 
 export function useNormalization() {
     const [corrections, setCorrections] = useState({
         classNames: {},
-        teacherNames: {},
+        teacherNames: {}, // Record<string, { nom: string, prenom: string }>
         staff: [],
         classExtraTeachers: {},
     });
+
+    // ── Reset ──────────────────────────────────────────────────────
+    const reset = () =>
+        setCorrections({
+            classNames: {},
+            teacherNames: {},
+            staff: [],
+            classExtraTeachers: {},
+        });
 
     // ── Noms de classes ───────────────────────────────────────────
     const setClassName = (original, corrected) =>
@@ -24,16 +34,50 @@ export function useNormalization() {
         });
 
     // ── Noms d'enseignants ────────────────────────────────────────
-    const setTeacherName = (cl, name) =>
-        setCorrections((p) => ({
-            ...p,
-            teacherNames: { ...p.teacherNames, [cl]: name },
-        }));
+    const setTeacherField = (
+        cl,
+        field,
+        value,
+        initialSplit = { nom: "", prenom: "" }
+    ) => {
+        const normalized =
+            field === "nom"
+                ? toNom(value)
+                : field === "prenom"
+                  ? toPrenom(value)
+                  : value;
+        setCorrections((p) => {
+            const current = p.teacherNames[cl] ?? initialSplit; // ← autoSplit passé en paramètre
+            return {
+                ...p,
+                teacherNames: {
+                    ...p.teacherNames,
+                    [cl]: { ...current, [field]: normalized },
+                },
+            };
+        });
+    };
 
+    // rawFromCSV passé en paramètre pour que le hook reste pur
     const resetTeacherName = (cl) =>
         setCorrections((p) => {
             const { [cl]: _, ...rest } = p.teacherNames;
             return { ...p, teacherNames: rest };
+        });
+
+    const swapTeacher = (cl, rawFromCSV) =>
+        setCorrections((p) => {
+            const current = p.teacherNames[cl] ?? splitTeacherName(rawFromCSV);
+            return {
+                ...p,
+                teacherNames: {
+                    ...p.teacherNames,
+                    [cl]: {
+                        nom: toNom(current.prenom),
+                        prenom: toPrenom(current.nom),
+                    },
+                },
+            };
         });
 
     // ── Staff ─────────────────────────────────────────────────────
@@ -64,7 +108,7 @@ export function useNormalization() {
             staff: p.staff.filter((s) => s.id !== id),
         }));
 
-    // ── Co-titulaires / décharges ─────────────────────────────────
+    // ── Co-titulaires ─────────────────────────────────────────────
     const addExtraTeacher = (cl) =>
         setCorrections((p) => ({
             ...p,
@@ -104,20 +148,15 @@ export function useNormalization() {
                 ),
             },
         }));
-    const reset = () =>
-        setCorrections({
-            classNames: {},
-            teacherNames: {},
-            staff: [],
-            classExtraTeachers: {},
-        });
+
     return {
         corrections,
         reset,
         setClassName,
         resetClassName,
-        setTeacherName,
+        setTeacherField,
         resetTeacherName,
+        swapTeacher,
         addStaff,
         updateStaff,
         removeStaff,
