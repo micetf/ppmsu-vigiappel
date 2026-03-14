@@ -1,4 +1,5 @@
 import Section from "../ui/Section";
+import NormField from "../ui/NormField";
 
 const FONCTIONS = [
     "AESH",
@@ -11,6 +12,9 @@ const FONCTIONS = [
     "Autre",
 ];
 
+const cx =
+    "w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500";
+
 export default function OtherAdultsSection({
     classes,
     staff,
@@ -18,7 +22,6 @@ export default function OtherAdultsSection({
     onUpdate,
     onRemove,
 }) {
-    // Rattachement : une classe OU "école" (sans notion PPMS)
     const rattachementOptions = [
         { value: "school", label: "École (sans classe attitrée)" },
         ...classes.map((cl) => ({
@@ -45,28 +48,24 @@ export default function OtherAdultsSection({
                             <label className="block text-xs font-medium text-gray-600 mb-1">
                                 NOM
                             </label>
-                            <input
-                                type="text"
-                                placeholder="GARCIA"
+                            <NormField
                                 value={s.nom}
-                                onChange={(e) =>
-                                    onUpdate(s.id, "nom", e.target.value)
-                                }
-                                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="GARCIA"
+                                onCommit={(val) => onUpdate(s.id, "nom", val)}
+                                className={cx}
                             />
                         </div>
                         <div>
                             <label className="block text-xs font-medium text-gray-600 mb-1">
                                 Prénom
                             </label>
-                            <input
-                                type="text"
-                                placeholder="Ana"
+                            <NormField
                                 value={s.prenom}
-                                onChange={(e) =>
-                                    onUpdate(s.id, "prenom", e.target.value)
+                                placeholder="Ana"
+                                onCommit={(val) =>
+                                    onUpdate(s.id, "prenom", val)
                                 }
-                                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                className={cx}
                             />
                         </div>
                         <div>
@@ -90,7 +89,7 @@ export default function OtherAdultsSection({
                         </div>
                         <div>
                             <label className="block text-xs font-medium text-gray-600 mb-1">
-                                Rattachement habituel
+                                Rattachement
                             </label>
                             <select
                                 value={s.rattachement}

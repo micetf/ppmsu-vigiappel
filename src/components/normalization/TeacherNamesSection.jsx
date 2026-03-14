@@ -1,9 +1,34 @@
+import { useState, useEffect } from "react";
 import Section from "../ui/Section";
 import { splitTeacherName } from "../../utils/normalization";
 
+/**
+ * Input contrôlé localement — transforme uniquement au blur.
+ * Évite le saut de curseur dû à toNom/toPrenom appliqué à chaque frappe.
+ */
+function NormField({ value, onCommit, placeholder, className }) {
+    const [local, setLocal] = useState(value);
+
+    // Synchronise si la valeur externe change (swap, reset…)
+    useEffect(() => {
+        setLocal(value);
+    }, [value]);
+
+    return (
+        <input
+            type="text"
+            placeholder={placeholder}
+            value={local}
+            onChange={(e) => setLocal(e.target.value)}
+            onBlur={() => onCommit(local)}
+            className={className}
+        />
+    );
+}
+
 export default function TeacherNamesSection({
     classes,
-    rawTeacherByClass, // clé = nom corrigé → chaîne brute CSV
+    rawTeacherByClass,
     corrections,
     onSetField,
     onReset,
@@ -31,24 +56,15 @@ export default function TeacherNamesSection({
                     return (
                         <div key={cl} className="space-y-0.5">
                             <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-4 py-2.5">
-                                {/* Label classe */}
                                 <span className="text-sm font-bold text-gray-700 w-14 shrink-0">
                                     {cl}
                                 </span>
 
-                                {/* Champ NOM */}
-                                <input
-                                    type="text"
-                                    aria-label={`NOM — ${cl}`}
-                                    placeholder="NOM"
+                                <NormField
                                     value={current.nom}
-                                    onChange={(e) =>
-                                        onSetField(
-                                            cl,
-                                            "nom",
-                                            e.target.value,
-                                            autoSplit
-                                        )
+                                    placeholder="NOM"
+                                    onCommit={(val) =>
+                                        onSetField(cl, "nom", val, autoSplit)
                                     }
                                     className={`w-36 rounded-lg border px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500
                                         ${
@@ -58,19 +74,11 @@ export default function TeacherNamesSection({
                                         }`}
                                 />
 
-                                {/* Champ Prénom */}
-                                <input
-                                    type="text"
-                                    aria-label={`Prénom — ${cl}`}
-                                    placeholder="Prénom"
+                                <NormField
                                     value={current.prenom}
-                                    onChange={(e) =>
-                                        onSetField(
-                                            cl,
-                                            "prenom",
-                                            e.target.value,
-                                            autoSplit
-                                        )
+                                    placeholder="Prénom"
+                                    onCommit={(val) =>
+                                        onSetField(cl, "prenom", val, autoSplit)
                                     }
                                     className={`flex-1 rounded-lg border px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500
                                         ${
@@ -82,7 +90,6 @@ export default function TeacherNamesSection({
                                         }`}
                                 />
 
-                                {/* Bouton permuter ⇄ */}
                                 <button
                                     type="button"
                                     onClick={() => onSwap(cl, rawFromCSV)}
@@ -93,7 +100,6 @@ export default function TeacherNamesSection({
                                     ⇄
                                 </button>
 
-                                {/* Annuler */}
                                 {isDirty && (
                                     <button
                                         type="button"
@@ -107,7 +113,6 @@ export default function TeacherNamesSection({
                                 )}
                             </div>
 
-                            {/* Référence CSV si modifié */}
                             {isDirty && rawFromCSV && (
                                 <p className="text-xs text-gray-400 pl-4">
                                     CSV :{" "}
@@ -117,7 +122,6 @@ export default function TeacherNamesSection({
                                 </p>
                             )}
 
-                            {/* Alerte douce si prénom non détecté */}
                             {prenomManquant && (
                                 <p className="text-xs text-amber-500 pl-4">
                                     ⚠️ Prénom non détecté — saisir si connu

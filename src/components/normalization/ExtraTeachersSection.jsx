@@ -1,4 +1,8 @@
 import Section from "../ui/Section";
+import NormField from "../ui/NormField";
+
+const cx =
+    "w-full rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500";
 
 export default function ExtraTeachersSection({
     classes,
@@ -7,11 +11,6 @@ export default function ExtraTeachersSection({
     onUpdate,
     onRemove,
 }) {
-    const extrasCount = Object.values(classExtraTeachers).reduce(
-        (acc, arr) => acc + (arr?.filter((et) => et.nom.trim()).length || 0),
-        0
-    );
-
     return (
         <Section title="Co-enseignants et décharges">
             <p className="text-sm text-gray-500">
@@ -32,7 +31,7 @@ export default function ExtraTeachersSection({
                                 <span className="text-xs font-bold text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
                                     {cl}
                                 </span>
-                                {extrasCount > 0 && extras.length > 0 && (
+                                {extras.length > 0 && (
                                     <span className="text-xs text-blue-700 font-medium">
                                         {extras.length} ajouté
                                         {extras.length > 1 ? "s" : ""}
@@ -56,38 +55,26 @@ export default function ExtraTeachersSection({
                                         <label className="block text-xs font-medium text-gray-600 mb-1">
                                             NOM
                                         </label>
-                                        <input
-                                            type="text"
-                                            placeholder="BERNARD"
+                                        <NormField
                                             value={et.nom}
-                                            onChange={(e) =>
-                                                onUpdate(
-                                                    cl,
-                                                    idx,
-                                                    "nom",
-                                                    e.target.value
-                                                )
+                                            placeholder="BERNARD"
+                                            onCommit={(val) =>
+                                                onUpdate(cl, idx, "nom", val)
                                             }
-                                            className="w-full rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                            className={cx}
                                         />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-medium text-gray-600 mb-1">
                                             Prénom
                                         </label>
-                                        <input
-                                            type="text"
-                                            placeholder="Claire"
+                                        <NormField
                                             value={et.prenom}
-                                            onChange={(e) =>
-                                                onUpdate(
-                                                    cl,
-                                                    idx,
-                                                    "prenom",
-                                                    e.target.value
-                                                )
+                                            placeholder="Claire"
+                                            onCommit={(val) =>
+                                                onUpdate(cl, idx, "prenom", val)
                                             }
-                                            className="w-full rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                            className={cx}
                                         />
                                     </div>
                                     <div>
@@ -104,7 +91,7 @@ export default function ExtraTeachersSection({
                                                     e.target.value
                                                 )
                                             }
-                                            className="w-full rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                            className={cx}
                                         >
                                             {[
                                                 "Décharge",

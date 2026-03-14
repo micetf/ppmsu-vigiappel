@@ -1,4 +1,5 @@
 import Section from "../ui/Section";
+import NormField from "../ui/NormField";
 
 export default function ClassNamesSection({
     classes,
@@ -22,12 +23,11 @@ export default function ClassNamesSection({
                     return (
                         <div key={original} className="space-y-0.5">
                             <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-lg px-4 py-2.5">
-                                <input
-                                    type="text"
+                                <NormField
                                     value={corrected}
-                                    onChange={(e) => {
-                                        const val = e.target.value;
-                                        if (val === original || val === "") {
+                                    placeholder={original}
+                                    onCommit={(val) => {
+                                        if (!val || val === original) {
                                             onReset(original);
                                         } else {
                                             onSet(original, val);
